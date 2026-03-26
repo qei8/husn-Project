@@ -7,10 +7,19 @@ import bcrypt from "bcryptjs";
 
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
 const app = express();
-app.use(cors());
+
+// ==========================================
+// 1. إعدادات الـ CORS (حل مشكلة Failed to Fetch)
+// ==========================================
+app.use(cors({
+  origin: '*', // يسمح لـ Vercel وأي مصدر آخر بالاتصال بالسيرفر
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -26,7 +35,7 @@ const INCIDENTS_TABLE = process.env.DDB_INCIDENTS_TABLE;
 const USERS_TABLE = process.env.DDB_USERS_TABLE;
 const MODEL_API_URL = process.env.MODEL_API_URL;
 
-console.log("BOOTING HUSN SYSTEM...", {
+console.log("🚀 BOOTING HUSN SYSTEM...", {
   REGION: process.env.AWS_REGION,
   BUCKET: BUCKET,
   TABLE_INCIDENTS: INCIDENTS_TABLE,
@@ -34,25 +43,41 @@ console.log("BOOTING HUSN SYSTEM...", {
 });
 
 // =========================
-// 1. مساعدات (Helpers)
+// 2. مسارات اختبار السيرفر (Health Checks)
+// =========================
+app.get("/", (req, res) => {
+  res.send("🚀 HUSN System API is Running and Secure!");
+});
+
+app.get("/health", (req, res) => {
+  res.json({ status: "UP", message: "Server is reachable from Vercel" });
+});
+
+// =========================
+// 3. مساعدات (Helpers)
 // =========================
 async function analyzeImageWithModel(fileBuffer, fileName, contentType) {
   if (!MODEL_API_URL) {
     return { detected: false, message: "Model URL not configured" };
   }
-  const formData = new FormData();
-  const blob = new Blob([fileBuffer], { type: contentType });
-  formData.append("file", blob, fileName);
+  try {
+    const formData = new FormData();
+    const blob = new Blob([fileBuffer], { type: contentType });
+    formData.append("file", blob, fileName);
 
-  const response = await fetch(`${MODEL_API_URL}/predict`, {
-    method: "POST",
-    body: formData,
-  });
-  return response.json();
+    const response = await fetch(`${MODEL_API_URL}/predict`, {
+      method: "POST",
+      body: formData,
+    });
+    return response.json();
+  } catch (error) {
+    console.error("Model Analysis Error:", error);
+    return { detected: false, error: "Failed to connect to AI Model" };
+  }
 }
 
 // =========================
-// 2. نظام تسجيل الدخول (AUTH)
+// 4. نظام تسجيل الدخول (AUTH)
 // =========================
 app.post("/api/auth/login", async (req, res) => {
   const { userId, password } = req.body;
@@ -65,7 +90,6 @@ app.post("/api/auth/login", async (req, res) => {
     const user = result.Item;
     if (!user) return res.status(404).json({ error: "الموظف غير موجود" });
 
-    // شرط "النشاط": إذا كان غير نشط نمنعه من الدخول
     if (user.status === "Inactive") {
       return res.status(403).json({ error: "حسابك معطل حالياً، تواصل مع الإدارة" });
     }
@@ -80,15 +104,45 @@ app.post("/api/auth/login", async (req, res) => {
       isFirstLogin: user.isFirstLogin
     });
   } catch (e) {
+    console.error(e);
     res.status(500).json({ error: "فشل تسجيل الدخول" });
   }
 });
 
-// =========================
-// 3. إدارة المستخدمين (USERS)
-// =========================
+app.post("/api/auth/change-password", async (req, res) => {
+  const { userId, currentPassword, newPassword } = req.body;
+  try {
+    const result = await ddb.send(new GetCommand({
+      TableName: USERS_TABLE,
+      Key: { userId }
+    }));
 
-// جلب كل الموظفين (للأدمن)
+    const user = result.Item;
+    if (!user) return res.status(404).json({ error: "الموظف غير موجود" });
+
+    if (!user.isFirstLogin) {
+      if (!currentPassword) return res.status(400).json({ error: "يجب إدخال كلمة المرور الحالية" });
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) return res.status(401).json({ error: "كلمة المرور الحالية غير صحيحة" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await ddb.send(new UpdateCommand({
+      TableName: USERS_TABLE,
+      Key: { userId },
+      UpdateExpression: "set password = :p, isFirstLogin = :f",
+      ExpressionAttributeValues: { ":p": hashedPassword, ":f": false }
+    }));
+
+    res.json({ message: "تم تحديث كلمة المرور بنجاح" });
+  } catch (e) {
+    res.status(500).json({ error: "فشل تحديث كلمة المرور" });
+  }
+});
+
+// =========================
+// 5. إدارة المستخدمين (USERS)
+// =========================
 app.get("/api/users", async (req, res) => {
   try {
     const result = await ddb.send(new ScanCommand({ TableName: USERS_TABLE }));
@@ -98,17 +152,14 @@ app.get("/api/users", async (req, res) => {
   }
 });
 
-// إضافة موظف جديد (مع توليد باسورد مؤقت)
 app.post("/api/users", async (req, res) => {
   const { userId, name, role = "staff" } = req.body;
   try {
-    const tempPass = Math.floor(100000 + Math.random() * 900000).toString(); // 6 أرقام
+    const tempPass = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPassword = await bcrypt.hash(tempPass, 10);
 
     const newUser = {
-      userId,
-      name,
-      role,
+      userId, name, role,
       password: hashedPassword,
       status: "Active",
       isFirstLogin: true,
@@ -122,7 +173,6 @@ app.post("/api/users", async (req, res) => {
   }
 });
 
-// تغيير الحالة (Active / Inactive)
 app.patch("/api/users/:id/status", async (req, res) => {
   const { status } = req.body; 
   try {
@@ -139,58 +189,9 @@ app.patch("/api/users/:id/status", async (req, res) => {
   }
 });
 
-// مسار تحديث كلمة المرور لأول مرة
-app.post("/api/auth/change-password", async (req, res) => {
-  const { userId, currentPassword, newPassword } = req.body;
-  
-  try {
-    // 1. جلب بيانات المستخدم
-    const result = await ddb.send(new GetCommand({
-      TableName: USERS_TABLE,
-      Key: { userId }
-    }));
-
-    const user = result.Item;
-    if (!user) return res.status(404).json({ error: "الموظف غير موجود" });
-
-    // 2. المنطق الذكي:
-    // إذا كان الموظف قد دخل قبل (ليس أول دخول)، لازم نشيك على الباسوورد الحالي
-    if (!user.isFirstLogin) {
-      if (!currentPassword) {
-        return res.status(400).json({ error: "يجب إدخال كلمة المرور الحالية" });
-      }
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
-      if (!isMatch) {
-        return res.status(401).json({ error: "كلمة المرور الحالية غير صحيحة" });
-      }
-    }
-
-    // 3. تشفير الكلمة الجديدة
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    // 4. التحديث في DynamoDB
-    await ddb.send(new UpdateCommand({
-      TableName: USERS_TABLE,
-      Key: { userId },
-      UpdateExpression: "set password = :p, isFirstLogin = :f",
-      ExpressionAttributeValues: {
-        ":p": hashedPassword,
-        ":f": false // خلاص ما عاد يصير أول دخول
-      }
-    }));
-
-    res.json({ message: "تم تحديث كلمة المرور بنجاح" });
-
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "فشل تحديث كلمة المرور" });
-  }
-});
-
 // =========================
-// 4. الحوادث (INCIDENTS)
+// 6. الحوادث (INCIDENTS)
 // =========================
-
 app.get("/api/incidents", async (req, res) => {
   try {
     const result = await ddb.send(new ScanCommand({ TableName: INCIDENTS_TABLE }));
@@ -208,14 +209,12 @@ app.post("/api/drone/frame", upload.single("file"), async (req, res) => {
     const lng = req.body.lng ? Number(req.body.lng) : 39.2;
     const uavId = req.body.uavId || "UAV-01";
 
-    // تحليل الصورة بالمودل
     const modelResult = await analyzeImageWithModel(req.file.buffer, req.file.originalname, req.file.mimetype);
 
     if (!modelResult.detected) {
       return res.json({ detected: false, modelResult });
     }
 
-    // رفع الصورة لـ S3
     const key = `uploads/${Date.now()}-${req.file.originalname}`;
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET,
@@ -224,7 +223,6 @@ app.post("/api/drone/frame", upload.single("file"), async (req, res) => {
       Body: req.file.buffer,
     }));
 
-    // تسجيل الحادث
     const incidentId = `INC-${uuidv4()}`;
     const item = {
       incidentId,
@@ -240,11 +238,21 @@ app.post("/api/drone/frame", upload.single("file"), async (req, res) => {
     await ddb.send(new PutCommand({ TableName: INCIDENTS_TABLE, Item: item }));
     res.status(201).json({ detected: true, incident: item });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Internal error" });
   }
 });
 
+// =========================
+// 7. تشغيل السيرفر
+// =========================
 const port = process.env.PORT || 8080;
 app.listen(port, "0.0.0.0", () => {
-  console.log(`HUSN Server running on port ${port}`);
+  console.log(`
+  ==========================================
+  🚀 HUSN Server is officially Online!
+  📍 Port: ${port}
+  📍 Health: http://your-ip:${port}/health
+  ==========================================
+  `);
 });

@@ -1,4 +1,4 @@
-const API_BASE = "http://13.63.154.193:8080";
+const API_BASE = "https://duwcseegvhq1t.cloudfront.net";
 
 // 1. دالة إضافة موظف جديد (Admin Only)
 export async function addUser(userData: { userId: string; name: string; role: string }) {
