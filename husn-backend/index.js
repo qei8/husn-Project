@@ -197,19 +197,20 @@ app.patch("/api/users/:id/status", async (req, res) => {
 });
 
 
-// لازم يكون فيه نقطتين قبل userId عشان Express يفهم أنه متغير
 app.delete('/api/users/:userId', async (req, res) => {
   const { userId } = req.params; 
-  console.log("Attempting to delete user:", userId); // عشان تشوفين في الـ Logs وش قاعد يصير
+  
+  // سوي console.log هنا عشان تشوفي في الـ Logs حقت Vercel إذا الطلب وصل
+  console.log("جاري حذف المستخدم:", userId);
 
   try {
     await ddb.send(new DeleteCommand({
       TableName: USERS_TABLE,
-      Key: { userId: userId } // تأكدي أن اسم الحقل في DynamoDB هو userId بالضبط
+      Key: { userId: userId } 
     }));
-    res.status(200).json({ message: "Deleted successfully" });
+    res.status(200).json({ message: "تم الحذف بنجاح" });
   } catch (error) {
-    console.error("Delete Error:", error);
+    console.error("خطأ في DynamoDB:", error);
     res.status(500).json({ error: error.message });
   }
 });
