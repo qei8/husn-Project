@@ -1,5 +1,5 @@
 // الرابط الجديد لسيرفر الـ EC2 حقك
-const API_BASE = import.meta.env.VITE_API_URL || "https://duwcseegvhq1t.cloudfront.net";
+const API_BASE = import.meta.env.VITE_API_URL || "https://duwcseegvhq1t.cloudfront.net/api";
 export async function getIncidents(limit = 20) {
   // أضفنا try/catch لضمان عدم تعليق الموقع لو السيرفر طفى
   try {

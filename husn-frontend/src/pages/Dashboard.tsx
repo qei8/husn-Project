@@ -60,17 +60,31 @@ const Dashboard = () => {
   }
 }, []);
 
-  // الاتصال بالدرون
+  // الاتصال بالدرون (تحديث للـ Static IP)
   useEffect(() => {
-    const socket = io("http://10.215.37.109:8001");
+    // استخدمنا الـ IP الثابت الجديد مع بورت السوكيت
+    const socket = io("http://13.62.189.199:8001"); 
+    
     socket.on("connect", () => {
-      toast.success("UAV Telemetry Connected");
+      console.log("✅ Connected to UAV Telemetry Server");
+      toast.success(language === 'ar' ? "تم الاتصال ببيانات الدرون" : "UAV Telemetry Connected");
     });
+
     socket.on("telemetry-update", (data: Partial<UAVTelemetry>) => {
-      setTelemetry((prev) => ({ ...prev, ...data, timestamp: new Date().toISOString() }));
+      console.log("📡 New Telemetry Received:", data);
+      setTelemetry((prev) => ({ 
+        ...prev, 
+        ...data, 
+        timestamp: new Date().toISOString() 
+      }));
     });
+
+    socket.on("connect_error", (err) => {
+      console.error("❌ Socket Connection Error:", err);
+    });
+
     return () => { socket.disconnect(); };
-  }, []);
+  }, [language]);
 
   // جلب البلاغات
   useEffect(() => {
