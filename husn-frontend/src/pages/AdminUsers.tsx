@@ -100,43 +100,45 @@ const AdminUsers = () => {
 
   // دالة الحذف (تم نقلها للداخل لتتمكن من تحديث الـ State)
   const handleDeleteUser = async (id: string) => {
-  if (window.confirm(language === 'ar' ? 'هل أنتِ متأكدة؟' : 'Are you sure?')) {
+  // 1. سؤال التأكيد (عشان ما يحذف أحد بالغلط)
+  const confirmMsg = language === 'ar' ? 'هل أنتِ متأكدة من حذف هذا الموظف نهائياً؟' : 'Are you sure you want to delete this user permanently?';
+  
+  if (window.confirm(confirmMsg)) {
     try {
-      // جربي إضافة /auth/ قبل users إذا كان الباكيند مصمم كذا
+      // 2. إرسال طلب الحذف للباكيند (العنوان الجديد)
       const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          // إذا كان السيرفر يحتاج توكن، ضيفيه هنا
-        }
       });
 
-      if (response.status === 204 || response.ok) {
-        setUsers(users.filter(u => u.id !== id));
-        toast.success(language === 'ar' ? 'تم الحذف' : 'Deleted');
+      if (response.ok) {
+        // 3. إذا السيرفر رد بتم، نحذفه من القائمة اللي قدامنا فوراً
+        setUsers(prevUsers => prevUsers.filter(u => u.id !== id));
+        toast.success(language === 'ar' ? 'تم حذف الموظف بنجاح' : 'User deleted successfully');
       } else {
-        console.log("Response Status:", response.status);
-        toast.error("Error: " + response.status);
+        // إذا السيرفر رد بـ 404 أو 500
+        toast.error(language === 'ar' ? 'فشل الحذف: السيرفر لم يستجب' : 'Delete failed: Server error');
       }
     } catch (error) {
-      toast.error("Connection failed");
+      console.error("Delete Error:", error);
+      toast.error(language === 'ar' ? 'خطأ في الاتصال بالسيرفر' : 'Connection error');
     }
   }
 };
   const handleAddUser = async () => {
-    if (!newUser.employeeId || !newUser.fullName) {
-      toast.error(language === 'ar' ? "يرجى تعبئة الحقول" : "Please fill all fields");
-      return;
-    }
+  if (!newUser.employeeId || !newUser.fullName) {
+    toast.error(language === 'ar' ? "يرجى تعبئة الحقول" : "Please fill all fields");
+    return;
+  }
 
-    // منع تكرار رقم الموظف يدوياً في الفرونت إند
-    const isDuplicate = users.some(u => u.employeeId === newUser.employeeId);
-    if (isDuplicate) {
-      toast.error(language === 'ar' ? "رقم الموظف موجود مسبقاً!" : "Employee ID already exists!");
-      return;
-    }
+  // --- التحقق من التكرار هنا ---
+  const isDuplicate = users.some(u => u.employeeId === newUser.employeeId);
+  if (isDuplicate) {
+    toast.error(language === 'ar' ? "رقم الموظف هذا موجود مسبقاً!" : "Employee ID already exists!");
+    return;
+  }
+  // ---------------------------
 
-    setIsLoading(true);
+  setIsLoading(true);
     try {
       const result = await addUser({
         userId: newUser.employeeId,
