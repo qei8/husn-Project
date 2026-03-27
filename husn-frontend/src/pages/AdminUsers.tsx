@@ -100,26 +100,29 @@ const AdminUsers = () => {
 
   // دالة الحذف (تم نقلها للداخل لتتمكن من تحديث الـ State)
   const handleDeleteUser = async (id: string) => {
-    const confirmMsg = language === 'ar' ? 'هل أنتِ متأكدة من حذف هذا الموظف؟' : 'Are you sure you want to delete this user?';
-    if (window.confirm(confirmMsg)) {
-      try {
-        const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users/${id}`, {
-          method: 'DELETE',
-        });
-
-        if (response.ok) {
-          setUsers(users.filter(u => u.id !== id));
-          toast.success(language === 'ar' ? 'تم حذف الموظف بنجاح' : 'User deleted successfully');
-        } else {
-          toast.error(language === 'ar' ? 'فشل في حذف الموظف' : 'Failed to delete user');
+  if (window.confirm(language === 'ar' ? 'هل أنتِ متأكدة؟' : 'Are you sure?')) {
+    try {
+      // جربي إضافة /auth/ قبل users إذا كان الباكيند مصمم كذا
+      const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          // إذا كان السيرفر يحتاج توكن، ضيفيه هنا
         }
-      } catch (error) {
-        console.error("Error deleting user:", error);
-        toast.error(language === 'ar' ? 'حدث خطأ في الاتصال' : 'Connection error');
-      }
-    }
-  };
+      });
 
+      if (response.status === 204 || response.ok) {
+        setUsers(users.filter(u => u.id !== id));
+        toast.success(language === 'ar' ? 'تم الحذف' : 'Deleted');
+      } else {
+        console.log("Response Status:", response.status);
+        toast.error("Error: " + response.status);
+      }
+    } catch (error) {
+      toast.error("Connection failed");
+    }
+  }
+};
   const handleAddUser = async () => {
     if (!newUser.employeeId || !newUser.fullName) {
       toast.error(language === 'ar' ? "يرجى تعبئة الحقول" : "Please fill all fields");
