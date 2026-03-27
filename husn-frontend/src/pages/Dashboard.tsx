@@ -63,10 +63,9 @@ const Dashboard = () => {
  // في Dashboard.tsx
 useEffect(() => {
   // نكلم الـ IP المباشر ببروتوكول ws (بدون S)
-  const socket = io("http://13.62.189.199:8001", {
-    transports: ["websocket"], // إجباري عشان ما يحاول يسوي polling ويفشل
-    upgrade: false
-  });
+  const socket = io("https://duwcseegvhq1t.cloudfront.net", {
+  path: "/socket.io"
+});
 
   socket.on("connect", () => {
     console.log("✅ Socket Connected Directly via IP");
