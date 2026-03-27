@@ -8,7 +8,8 @@ import bcrypt from "bcryptjs";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-
+// في سطر 11 تقريباً، ضيفي DeleteCommand
+import { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 const app = express();
 
 // ==========================================
@@ -191,24 +192,31 @@ app.patch("/api/users/:id/status", async (req, res) => {
 
 // كود حذف المستخدم من الباكيند (Node.js + DynamoDB)
 // كود الحذف بعد مطابقته مع صورة AWS DynamoDB
+// كود الحذف المحدث والمتوافق مع باقي السيرفر
 app.delete('/api/users/:id', async (req, res) => {
-  const { id } = req.params; // التأكد إن الـ id يجي من الرابط
+  const { id } = req.params;
   
-  console.log("Attempting to delete user with ID:", id); // سطر مهم للـ Logs
-
-  const params = {
-    TableName: "Users", // التأكد من الحرف الكبير U كما في الصورة
-    Key: {
-      userId: id // التأكد من كتابة userId (u صغيرة و I كبيرة)
-    }
-  };
+  console.log("🗑️ Attempting to delete user with ID:", id);
 
   try {
-    await dynamoDb.delete(params).promise();
-    res.status(200).send({ message: "Deleted successfully" });
+    // نستخدم ddb.send و DeleteCommand المتوافق مع تعريفك فوق
+    const { DeleteCommand } = await import("@aws-sdk/lib-dynamodb"); 
+    
+    await ddb.send(new DeleteCommand({
+      TableName: USERS_TABLE, // نستخدم المتغير اللي معرف فوق
+      Key: {
+        userId: id // التأكد من userId كما في الصورة
+      }
+    }));
+
+    console.log(`✅ User ${id} deleted successfully`);
+    res.status(200).json({ message: "تم حذف الموظف بنجاح" });
   } catch (error) {
-    console.error("DynamoDB Delete Error:", error);
-    res.status(500).send({ error: "Server Error", details: error.message });
+    console.error("❌ DynamoDB Delete Error:", error);
+    res.status(500).json({ 
+      error: "فشل الحذف من السيرفر", 
+      details: error.message 
+    });
   }
 });
 
