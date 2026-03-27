@@ -62,18 +62,20 @@ const Dashboard = () => {
 
  // في Dashboard.tsx
 useEffect(() => {
-  // نستخدم رابط CloudFront مباشرة
-  const socket = io("https://duwcseegvhq1t.cloudfront.net", {
-    path: "/socket.io", // تأكدي إن هذا المسار مسموح به في CloudFront
-    transports: ["websocket"] // أجبري السوكيت يستخدم Websocket بدل الـ Polling
+  // نكلم الـ IP المباشر ببروتوكول ws (بدون S)
+  const socket = io("http://13.62.189.199:8001", {
+    transports: ["websocket"], // إجباري عشان ما يحاول يسوي polling ويفشل
+    upgrade: false
   });
 
   socket.on("connect", () => {
-    toast.success(language === 'ar' ? "متصل ببيانات الدرون" : "Connected to Drone Data");
+    console.log("✅ Socket Connected Directly via IP");
+    toast.success(language === 'ar' ? "متصل بالدرون" : "UAV Connected");
   });
 
   socket.on("connect_error", (err) => {
     console.error("❌ Socket Error:", err.message);
+    // لو فشل، جربي تفتحين الـ Insecure content في المتصفح زي ما سوينا للفيديو
   });
 
   return () => { socket.disconnect(); };
