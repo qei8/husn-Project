@@ -7,15 +7,22 @@ import bcrypt from "bcryptjs";
 
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { 
+  DynamoDBDocumentClient, 
+  PutCommand, 
+  GetCommand, 
+  ScanCommand, 
+  UpdateCommand, 
+  DeleteCommand 
+} from "@aws-sdk/lib-dynamodb";
 
-import { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 const app = express();
 
 // ==========================================
-// 1. إعدادات الـ CORS (حل مشكلة Failed to Fetch)
+// 1. إعدادات الـ CORS
 // ==========================================
 app.use(cors({
-  origin: '*', // يسمح لـ Vercel وأي مصدر آخر بالاتصال بالسيرفر
+  origin: '*', 
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -50,7 +57,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/health", (req, res) => {
-  res.json({ status: "UP", message: "Server is reachable from Vercel" });
+  res.json({ status: "UP", message: "Server is reachable" });
 });
 
 // =========================
@@ -153,7 +160,7 @@ app.get("/api/users", async (req, res) => {
 });
 
 app.post("/api/users", async (req, res) => {
-  const { userId, name, role = "staff" } = req.body;
+  const { userId, name, role = "employee" } = req.body;
   try {
     const tempPass = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPassword = await bcrypt.hash(tempPass, 10);
@@ -188,10 +195,9 @@ app.patch("/api/users/:id/status", async (req, res) => {
     res.status(500).json({ error: "فشل تحديث الحالة" });
   }
 });
-// الحذف
+
 app.delete('/api/users', async (req, res) => {
-  const id = req.query.userId; // نأخذ الـ ID من بعد علامة الاستفهام ?userId=
-  
+  const id = req.query.userId; 
   if (!id) return res.status(400).json({ error: "userId is required" });
 
   try {
@@ -205,6 +211,7 @@ app.delete('/api/users', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 // =========================
 // 6. الحوادث (INCIDENTS)
 // =========================
@@ -268,7 +275,6 @@ app.listen(port, "0.0.0.0", () => {
   ==========================================
   🚀 HUSN Server is officially Online!
   📍 Port: ${port}
-  📍 Health: http://your-ip:${port}/health
   ==========================================
   `);
 });

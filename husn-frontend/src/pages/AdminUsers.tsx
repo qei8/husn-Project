@@ -35,7 +35,7 @@ import {
   Search,
   Loader2,
   Shield,
-  Trash2 // تم إضافة أيقونة الحذف
+  Trash2 
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -65,7 +65,6 @@ const AdminUsers = () => {
     role: 'employee' as 'admin' | 'employee',
   });
 
-  // حماية الصفحة
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     const userData = savedUser ? JSON.parse(savedUser) : null;
@@ -75,7 +74,6 @@ const AdminUsers = () => {
     }
   }, [navigate, language]);
 
-  // جلب البيانات من السيرفر
   const fetchUsers = async () => {
     try {
       const res = await fetch("https://duwcseegvhq1t.cloudfront.net/api/users");
@@ -98,47 +96,43 @@ const AdminUsers = () => {
     fetchUsers();
   }, [language]);
 
-  // دالة الحذف (تم نقلها للداخل لتتمكن من تحديث الـ State)
- const handleDeleteUser = async (id: string) => {
-  const confirmMsg = language === 'ar' ? 'هل أنتِ متأكدة من حذف هذا الموظف نهائياً؟' : 'Are you sure you want to delete this user permanently?';
-  
-  if (window.confirm(confirmMsg)) {
-    try {
-      // نستخدم URLSearchParams للتأكد من تشفير الرابط بشكل صحيح
-      const params = new URLSearchParams({ userId: id });
-      const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users?${params.toString()}`, {
-        method: 'DELETE',
-      });
+  const handleDeleteUser = async (empId: string, fullName: string) => {
+    const confirmMsg = language === 'ar' 
+      ? `هل أنتِ متأكدة من حذف الموظف (${fullName}) نهائياً؟` 
+      : `Are you sure you want to delete ${fullName} permanently?`;
+    
+    if (window.confirm(confirmMsg)) {
+      try {
+        const params = new URLSearchParams({ userId: empId });
+        const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users?${params.toString()}`, {
+          method: 'DELETE',
+        });
 
-      if (response.ok) {
-        setUsers(prevUsers => prevUsers.filter(u => u.id !== id));
-        toast.success(language === 'ar' ? 'تم حذف الموظف بنجاح' : 'User deleted successfully');
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Server Error:", response.status, errorData);
-        toast.error(language === 'ar' ? 'الموظف غير موجود أو فشل الحذف' : 'User not found or delete failed');
+        if (response.ok) {
+          setUsers(prevUsers => prevUsers.filter(u => u.employeeId !== empId));
+          toast.success(language === 'ar' ? 'تم حذف الموظف بنجاح' : 'User deleted successfully');
+        } else {
+          toast.error(language === 'ar' ? 'فشل الحذف من السيرفر' : 'Delete failed');
+        }
+      } catch (error) {
+        toast.error(language === 'ar' ? 'خطأ في الاتصال بالسيرفر' : 'Connection error');
       }
-    } catch (error) {
-      console.error("Connection Error:", error);
-      toast.error(language === 'ar' ? 'خطأ في الاتصال بالسيرفر' : 'Connection error');
     }
-  }
-};
+  };
+
   const handleAddUser = async () => {
-  if (!newUser.employeeId || !newUser.fullName) {
-    toast.error(language === 'ar' ? "يرجى تعبئة الحقول" : "Please fill all fields");
-    return;
-  }
+    if (!newUser.employeeId || !newUser.fullName) {
+      toast.error(language === 'ar' ? "يرجى تعبئة الحقول" : "Please fill all fields");
+      return;
+    }
 
-  // --- التحقق من التكرار هنا ---
-  const isDuplicate = users.some(u => u.employeeId === newUser.employeeId);
-  if (isDuplicate) {
-    toast.error(language === 'ar' ? "رقم الموظف هذا موجود مسبقاً!" : "Employee ID already exists!");
-    return;
-  }
-  // ---------------------------
+    const isDuplicate = users.some(u => u.employeeId === newUser.employeeId);
+    if (isDuplicate) {
+      toast.error(language === 'ar' ? "رقم الموظف هذا موجود مسبقاً!" : "Employee ID already exists!");
+      return;
+    }
 
-  setIsLoading(true);
+    setIsLoading(true);
     try {
       const result = await addUser({
         userId: newUser.employeeId,
@@ -146,7 +140,6 @@ const AdminUsers = () => {
         role: newUser.role
       });
       
-      // تحديث القائمة فوراً
       setUsers([...users, { 
         id: newUser.employeeId, 
         employeeId: newUser.employeeId, 
@@ -291,7 +284,7 @@ const AdminUsers = () => {
                         size="icon" 
                         variant="ghost" 
                         className="text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20"
-                        onClick={() => handleDeleteUser(user.id)}
+                        onClick={() => handleDeleteUser(user.employeeId, user.fullName)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
