@@ -34,7 +34,8 @@ import {
   Power, 
   Search,
   Loader2,
-  Shield
+  Shield,
+  Trash2 // تم إضافة أيقونة الحذف
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -64,7 +65,7 @@ const AdminUsers = () => {
     role: 'employee' as 'admin' | 'employee',
   });
 
-  // حماية الصفحة: نطرده للداشبورد لو مو أدمن
+  // حماية الصفحة
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     const userData = savedUser ? JSON.parse(savedUser) : null;
@@ -75,38 +76,63 @@ const AdminUsers = () => {
   }, [navigate, language]);
 
   // جلب البيانات من السيرفر
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch("https://duwcseegvhq1t.cloudfront.net/api/users");
+      const data = await res.json();
+      const formattedUsers = data.map((u: any) => ({
+        id: u.userId,
+        employeeId: u.userId,
+        fullName: u.name,
+        role: u.role,
+        isActive: u.status === "Active",
+        lastLogin: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Never'
+      }));
+      setUsers(formattedUsers);
+    } catch (error) {
+      toast.error(language === 'ar' ? "فشل جلب البيانات" : "Fetch failed");
+    }
+  };
+
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-       // انسخي هذا السطر وحطيه بدال القديم
-const res = await fetch("https://duwcseegvhq1t.cloudfront.net/api/users");
-        const data = await res.json();
-        const formattedUsers = data.map((u: any) => ({
-          id: u.userId,
-          employeeId: u.userId,
-          fullName: u.name,
-          role: u.role,
-          isActive: u.status === "Active",
-          lastLogin: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Never'
-        }));
-        setUsers(formattedUsers);
-      } catch (error) {
-        toast.error(language === 'ar' ? "فشل جلب البيانات" : "Fetch failed");
-      }
-    };
     fetchUsers();
   }, [language]);
 
-  const filteredUsers = users.filter(user => 
-    user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.employeeId.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // دالة الحذف (تم نقلها للداخل لتتمكن من تحديث الـ State)
+  const handleDeleteUser = async (id: string) => {
+    const confirmMsg = language === 'ar' ? 'هل أنتِ متأكدة من حذف هذا الموظف؟' : 'Are you sure you want to delete this user?';
+    if (window.confirm(confirmMsg)) {
+      try {
+        const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users/${id}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          setUsers(users.filter(u => u.id !== id));
+          toast.success(language === 'ar' ? 'تم حذف الموظف بنجاح' : 'User deleted successfully');
+        } else {
+          toast.error(language === 'ar' ? 'فشل في حذف الموظف' : 'Failed to delete user');
+        }
+      } catch (error) {
+        console.error("Error deleting user:", error);
+        toast.error(language === 'ar' ? 'حدث خطأ في الاتصال' : 'Connection error');
+      }
+    }
+  };
 
   const handleAddUser = async () => {
     if (!newUser.employeeId || !newUser.fullName) {
       toast.error(language === 'ar' ? "يرجى تعبئة الحقول" : "Please fill all fields");
       return;
     }
+
+    // منع تكرار رقم الموظف يدوياً في الفرونت إند
+    const isDuplicate = users.some(u => u.employeeId === newUser.employeeId);
+    if (isDuplicate) {
+      toast.error(language === 'ar' ? "رقم الموظف موجود مسبقاً!" : "Employee ID already exists!");
+      return;
+    }
+
     setIsLoading(true);
     try {
       const result = await addUser({
@@ -114,12 +140,22 @@ const res = await fetch("https://duwcseegvhq1t.cloudfront.net/api/users");
         name: newUser.fullName,
         role: newUser.role
       });
-      setUsers([...users, { id: newUser.employeeId, employeeId: newUser.employeeId, fullName: newUser.fullName, role: newUser.role, isActive: true, lastLogin: 'Never' }]);
+      
+      // تحديث القائمة فوراً
+      setUsers([...users, { 
+        id: newUser.employeeId, 
+        employeeId: newUser.employeeId, 
+        fullName: newUser.fullName, 
+        role: newUser.role, 
+        isActive: true, 
+        lastLogin: 'Never' 
+      }]);
+      
       setIsAddDialogOpen(false);
       setNewUser({ employeeId: '', fullName: '', role: 'employee' });
-      toast.success(`${t('userAdded')}. Pass: ${result.tempPass}`, { duration: 15000 });
+      toast.success(`${t('userAdded')}. Pass: ${result.tempPass}`, { duration: 10000 });
     } catch (error: any) {
-      toast.error("Error");
+      toast.error(language === 'ar' ? "فشل إضافة المستخدم" : "Failed to add user");
     } finally {
       setIsLoading(false);
     }
@@ -131,20 +167,22 @@ const res = await fetch("https://duwcseegvhq1t.cloudfront.net/api/users");
     try {
       await updateUserStatus(user.employeeId, user.isActive ? 'Inactive' : 'Active');
       setUsers(users.map(u => u.id === userId ? { ...u, isActive: !u.isActive } : u));
-      const msg = language === 'ar' ? "تم تحديث الحالة لـ " : "Status updated for ";
-      toast.success(msg + user.fullName);
+      toast.success((language === 'ar' ? "تم تحديث حالة " : "Status updated for ") + user.fullName);
     } catch (error) {
       toast.error("Failed");
     }
   };
 
+  const filteredUsers = users.filter(user => 
+    user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    user.employeeId.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-background" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-      {/* هيدر واحد بس يظهر فوق */}
       <DashboardHeader />
 
       <main className="p-6 max-w-7xl mx-auto">
-        {/* عنوان الصفحة الداخلي */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <Button size="icon" variant="ghost" onClick={() => navigate('/dashboard')}>
@@ -199,9 +237,8 @@ const res = await fetch("https://duwcseegvhq1t.cloudfront.net/api/users");
           </Dialog>
         </div>
 
-        {/* شريط البحث */}
         <div className="mb-6">
-          <div className="relative w-full max-w-md">
+          <div className="relative w-full max-md">
             <Search className={`absolute ${language === 'ar' ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground`} />
             <Input
               placeholder={t('searchUsers')}
@@ -212,7 +249,6 @@ const res = await fetch("https://duwcseegvhq1t.cloudfront.net/api/users");
           </div>
         </div>
 
-        {/* جدول الموظفين */}
         <div className="panel overflow-hidden border rounded-xl bg-card shadow-md">
           <Table>
             <TableHeader>
@@ -231,7 +267,9 @@ const res = await fetch("https://duwcseegvhq1t.cloudfront.net/api/users");
                   <TableCell className="font-mono">{user.employeeId}</TableCell>
                   <TableCell className="font-medium">{user.fullName}</TableCell>
                   <TableCell>
-                    <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>{user.role === 'admin' ? t('admin') : t('employee')}</Badge>
+                    <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                      {user.role === 'admin' ? t('admin') : t('employee')}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={user.isActive ? 'border-green-500 text-green-500' : 'border-gray-400 text-gray-400'}>
@@ -240,9 +278,19 @@ const res = await fetch("https://duwcseegvhq1t.cloudfront.net/api/users");
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">{user.lastLogin}</TableCell>
                   <TableCell className={language === 'ar' ? 'text-left' : 'text-right'}>
-                    <Button size="icon" variant="ghost" onClick={() => handleToggleActive(user.id)}>
-                      <Power className={`w-4 h-4 ${user.isActive ? 'text-green-500' : 'text-gray-400'}`} />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => handleToggleActive(user.id)}>
+                        <Power className={`w-4 h-4 ${user.isActive ? 'text-green-500' : 'text-gray-400'}`} />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20"
+                        onClick={() => handleDeleteUser(user.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
