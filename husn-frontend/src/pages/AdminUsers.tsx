@@ -43,8 +43,8 @@ import DashboardHeader from '@/components/layout/DashboardHeader';
 import { addUser, updateUserStatus } from '@/lib/usersApi'; 
 
 interface User {
-  id: string;
-  employeeId: string;
+  id: string; // يستخدم كـ Key في React
+  userId: string; // المعرف الحقيقي في DynamoDB
   fullName: string;
   role: 'admin' | 'employee';
   isActive: boolean;
@@ -60,11 +60,12 @@ const AdminUsers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newUser, setNewUser] = useState({
-    employeeId: '',
+    employeeId: '', // هذا الحقل في الفورم يمثل الـ userId المطلوب
     fullName: '',
     role: 'employee' as 'admin' | 'employee',
   });
 
+  // حماية الصفحة
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     const userData = savedUser ? JSON.parse(savedUser) : null;
@@ -74,13 +75,14 @@ const AdminUsers = () => {
     }
   }, [navigate, language]);
 
+  // جلب البيانات من السيرفر
   const fetchUsers = async () => {
     try {
       const res = await fetch("https://duwcseegvhq1t.cloudfront.net/api/users");
       const data = await res.json();
       const formattedUsers = data.map((u: any) => ({
-        id: u.userId,
-        employeeId: u.userId,
+        id: u.userId, // نستخدم الـ userId كـ id للـ State
+        userId: u.userId, 
         fullName: u.name,
         role: u.role,
         isActive: u.status === "Active",
@@ -96,23 +98,24 @@ const AdminUsers = () => {
     fetchUsers();
   }, [language]);
 
-  const handleDeleteUser = async (empId: string, fullName: string) => {
+  // دالة الحذف المعدلة لتستخدم userId الصافي
+  const handleDeleteUser = async (targetUserId: string, name: string) => {
     const confirmMsg = language === 'ar' 
-      ? `هل أنتِ متأكدة من حذف الموظف (${fullName}) نهائياً؟` 
-      : `Are you sure you want to delete ${fullName} permanently?`;
+      ? `هل أنتِ متأكدة من حذف الموظف (${name}) نهائياً؟` 
+      : `Are you sure you want to delete ${name} permanently?`;
     
     if (window.confirm(confirmMsg)) {
       try {
-        const params = new URLSearchParams({ userId: empId });
+        const params = new URLSearchParams({ userId: targetUserId });
         const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users?${params.toString()}`, {
           method: 'DELETE',
         });
 
         if (response.ok) {
-          setUsers(prevUsers => prevUsers.filter(u => u.employeeId !== empId));
+          setUsers(prevUsers => prevUsers.filter(u => u.userId !== targetUserId));
           toast.success(language === 'ar' ? 'تم حذف الموظف بنجاح' : 'User deleted successfully');
         } else {
-          toast.error(language === 'ar' ? 'فشل الحذف من السيرفر' : 'Delete failed');
+          toast.error(language === 'ar' ? 'الموظف غير موجود أو فشل الحذف' : 'Delete failed');
         }
       } catch (error) {
         toast.error(language === 'ar' ? 'خطأ في الاتصال بالسيرفر' : 'Connection error');
@@ -126,9 +129,9 @@ const AdminUsers = () => {
       return;
     }
 
-    const isDuplicate = users.some(u => u.employeeId === newUser.employeeId);
+    const isDuplicate = users.some(u => u.userId === newUser.employeeId);
     if (isDuplicate) {
-      toast.error(language === 'ar' ? "رقم الموظف هذا موجود مسبقاً!" : "Employee ID already exists!");
+      toast.error(language === 'ar' ? "رقم الموظف هذا موجود مسبقاً!" : "User ID already exists!");
       return;
     }
 
@@ -142,7 +145,7 @@ const AdminUsers = () => {
       
       setUsers([...users, { 
         id: newUser.employeeId, 
-        employeeId: newUser.employeeId, 
+        userId: newUser.employeeId, 
         fullName: newUser.fullName, 
         role: newUser.role, 
         isActive: true, 
@@ -159,12 +162,12 @@ const AdminUsers = () => {
     }
   };
 
-  const handleToggleActive = async (userId: string) => {
-    const user = users.find(u => u.id === userId);
+  const handleToggleActive = async (targetUserId: string) => {
+    const user = users.find(u => u.userId === targetUserId);
     if (!user) return;
     try {
-      await updateUserStatus(user.employeeId, user.isActive ? 'Inactive' : 'Active');
-      setUsers(users.map(u => u.id === userId ? { ...u, isActive: !u.isActive } : u));
+      await updateUserStatus(user.userId, user.isActive ? 'Inactive' : 'Active');
+      setUsers(users.map(u => u.userId === targetUserId ? { ...u, isActive: !u.isActive } : u));
       toast.success((language === 'ar' ? "تم تحديث حالة " : "Status updated for ") + user.fullName);
     } catch (error) {
       toast.error("Failed");
@@ -173,7 +176,7 @@ const AdminUsers = () => {
 
   const filteredUsers = users.filter(user => 
     user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.employeeId.toLowerCase().includes(searchQuery.toLowerCase())
+    user.userId.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -261,8 +264,8 @@ const AdminUsers = () => {
             </TableHeader>
             <TableBody>
               {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-mono">{user.employeeId}</TableCell>
+                <TableRow key={user.userId}>
+                  <TableCell className="font-mono">{user.userId}</TableCell>
                   <TableCell className="font-medium">{user.fullName}</TableCell>
                   <TableCell>
                     <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
@@ -277,14 +280,14 @@ const AdminUsers = () => {
                   <TableCell className="text-muted-foreground text-sm">{user.lastLogin}</TableCell>
                   <TableCell className={language === 'ar' ? 'text-left' : 'text-right'}>
                     <div className="flex items-center justify-end gap-1">
-                      <Button size="icon" variant="ghost" onClick={() => handleToggleActive(user.id)}>
+                      <Button size="icon" variant="ghost" onClick={() => handleToggleActive(user.userId)}>
                         <Power className={`w-4 h-4 ${user.isActive ? 'text-green-500' : 'text-gray-400'}`} />
                       </Button>
                       <Button 
                         size="icon" 
                         variant="ghost" 
                         className="text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20"
-                        onClick={() => handleDeleteUser(user.employeeId, user.fullName)}
+                        onClick={() => handleDeleteUser(user.userId, user.fullName)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
