@@ -196,14 +196,14 @@ app.patch("/api/users/:id/status", async (req, res) => {
   }
 });
 
-app.delete('/api/users', async (req, res) => {
-  const id = req.query.userId; 
-  if (!id) return res.status(400).json({ error: "userId is required" });
+// ابحثي عن دالة app.delete القديمة واستبدليها بهذي:
+app.delete('/api/users/:userId', async (req, res) => {
+  const { userId } = req.params; // الحين الـ ID يجي من الرابط مباشرة
 
   try {
     await ddb.send(new DeleteCommand({
       TableName: USERS_TABLE,
-      Key: { userId: id }
+      Key: { userId: userId } 
     }));
     res.status(200).json({ message: "تم الحذف بنجاح" });
   } catch (error) {

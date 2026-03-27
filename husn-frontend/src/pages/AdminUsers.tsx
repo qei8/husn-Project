@@ -99,29 +99,32 @@ const AdminUsers = () => {
   }, [language]);
 
   // دالة الحذف المعدلة لتستخدم userId الصافي
-  const handleDeleteUser = async (targetUserId: string, name: string) => {
-    const confirmMsg = language === 'ar' 
-      ? `هل أنتِ متأكدة من حذف الموظف (${name}) نهائياً؟` 
-      : `Are you sure you want to delete ${name} permanently?`;
-    
-    if (window.confirm(confirmMsg)) {
-      try {
-        const params = new URLSearchParams({ userId: targetUserId });
-        const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users?${params.toString()}`, {
-          method: 'DELETE',
-        });
+ const handleDeleteUser = async (targetUserId: string, name: string) => {
+  const confirmMsg = language === 'ar' 
+    ? `هل أنتِ متأكدة من حذف الموظف (${name}) نهائياً؟` 
+    : `Are you sure you want to delete ${name} permanently?`;
+  
+  if (window.confirm(confirmMsg)) {
+    try {
+      // لاحظي الرابط صار ينتهي بـ / والـ ID مباشرة بدون علامة استفهام
+      const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users/${targetUserId}`, {
+        method: 'DELETE',
+      });
 
-        if (response.ok) {
-          setUsers(prevUsers => prevUsers.filter(u => u.userId !== targetUserId));
-          toast.success(language === 'ar' ? 'تم حذف الموظف بنجاح' : 'User deleted successfully');
-        } else {
-          toast.error(language === 'ar' ? 'الموظف غير موجود أو فشل الحذف' : 'Delete failed');
-        }
-      } catch (error) {
-        toast.error(language === 'ar' ? 'خطأ في الاتصال بالسيرفر' : 'Connection error');
+      if (response.ok) {
+        setUsers(prevUsers => prevUsers.filter(u => u.userId !== targetUserId));
+        toast.success(language === 'ar' ? 'تم حذف الموظف بنجاح' : 'User deleted successfully');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Server Error:", response.status, errorData);
+        toast.error(language === 'ar' ? 'الموظف غير موجود أو فشل الحذف' : 'Delete failed');
       }
+    } catch (error) {
+      console.error("Connection Error:", error);
+      toast.error(language === 'ar' ? 'خطأ في الاتصال بالسيرفر' : 'Connection error');
     }
-  };
+  }
+};
 
   const handleAddUser = async () => {
     if (!newUser.employeeId || !newUser.fullName) {
