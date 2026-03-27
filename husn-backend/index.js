@@ -198,17 +198,20 @@ app.patch("/api/users/:id/status", async (req, res) => {
 
 // ابحثي عن دالة app.delete القديمة واستبدليها بهذي:
 // الحذف باستخدام المسار المباشر (Path Parameter)
-app.delete('/api/users/:id', async (req, res) => {
-  const { id } = req.params; // الحين الـ ID يجي من الرابط نفسه
+// الحذف باستخدام الـ Path Parameter (الحل الجذري)
+app.delete('/api/users/:userId', async (req, res) => {
+  const { userId } = req.params; // تأكدي أنها params مو query
   
+  if (!userId) return res.status(400).json({ error: "userId is required" });
+
   try {
     await ddb.send(new DeleteCommand({
       TableName: USERS_TABLE,
-      Key: { userId: id } // تأكدي أن userId هو اسم الحقل في DynamoDB
+      Key: { userId: userId } // تأكدي أن اسم الحقل في DynamoDB هو userId (سمول/كابيتال تفرق)
     }));
-    res.status(200).json({ message: "تم الحذف بنجاح" });
+    res.status(200).json({ message: "Deleted successfully" });
   } catch (error) {
-    console.error("Delete Error:", error);
+    console.error("DynamoDB Delete Error:", error);
     res.status(500).json({ error: error.message });
   }
 });

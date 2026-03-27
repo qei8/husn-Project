@@ -101,44 +101,42 @@ useEffect(() => {
   fetchUsers();
 }, [language]);
 
-  // دالة الحذف المعدلة لتستخدم userId الصافي
-const handleDeleteUser = async (uId: string) => {
+ 
 
+const handleDeleteUser = async (uId: string) => {
   const confirmMsg = language === 'ar'
-    ? `هل متأكد من حذف ${uId}؟`
-    : `Are you sure you want to delete ${uId}?`;
+    ? `هل أنتِ متأكدة من حذف الموظف رقم (${uId}) نهائياً؟`
+    : `Are you sure you want to delete user (${uId})?`;
 
   if (!window.confirm(confirmMsg)) return;
 
   try {
+    // 🔥 التعديل الجذري: تأكدنا من وجود / قبل الـ ID وإضافة منع الكاش
     const response = await fetch(
-      `https://duwcseegvhq1t.cloudfront.net/api/users/${uId}`,
+      `https://duwcseegvhq1t.cloudfront.net/api/users/${uId}`, 
       {
         method: 'DELETE',
+        cache: 'no-cache', // يمنع المتصفح من استهلاك روابط قديمة
+        headers: {
+          'Content-Type': 'application/json'
+        }
       }
     );
 
-    // 🔍 اطبع الرد للتأكد
-    console.log("Response status:", response.status);
+    console.log("Delete Status:", response.status);
 
     if (response.ok) {
-      // 🔥 إعادة تحميل البيانات من السيرفر (أضمن حل سريع)
-      fetchUsers();
-
+      // تحديث الـ State فوراً عشان يختفي من الجدول قدام عينك
+      setUsers(prev => prev.filter(u => u.userId !== uId));
       toast.success(language === 'ar' ? 'تم الحذف بنجاح' : 'Deleted successfully');
     } else {
-      const errText = await response.text();
-      console.error("Server Error:", errText);
-
-      toast.error(language === 'ar'
-        ? 'فشل الحذف من السيرفر'
-        : 'Delete failed');
+      const errBody = await response.text();
+      console.error("Server Error Detail:", errBody);
+      toast.error(language === 'ar' ? 'فشل الحذف: الموظف غير موجود بالسيرفر' : 'Delete failed');
     }
   } catch (error) {
-    console.error("Network error:", error);
-    toast.error(language === 'ar'
-      ? 'خطأ في الاتصال'
-      : 'Connection error');
+    console.error("Connection Error:", error);
+    toast.error(language === 'ar' ? 'خطأ في الاتصال بالسيرفر' : 'Connection error');
   }
 };
 
