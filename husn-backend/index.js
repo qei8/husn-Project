@@ -189,37 +189,24 @@ app.patch("/api/users/:id/status", async (req, res) => {
     res.status(500).json({ error: "فشل تحديث الحالة" });
   }
 });
-
-// كود حذف المستخدم من الباكيند (Node.js + DynamoDB)
-// كود الحذف بعد مطابقته مع صورة AWS DynamoDB
-// كود الحذف المحدث والمتوافق مع باقي السيرفر
-app.delete('/api/users/:id', async (req, res) => {
-  const { id } = req.params;
+// في الباكيند index.js
+app.delete('/api/users', async (req, res) => {
+  const id = req.query.userId; // نأخذ الـ ID من الكويري باراميتر
   
-  console.log("🗑️ Attempting to delete user with ID:", id);
+  console.log("🗑️ Deleting user:", id);
+
+  if (!id) return res.status(400).json({ error: "userId is required" });
 
   try {
-    // نستخدم ddb.send و DeleteCommand المتوافق مع تعريفك فوق
-    const { DeleteCommand } = await import("@aws-sdk/lib-dynamodb"); 
-    
     await ddb.send(new DeleteCommand({
-      TableName: USERS_TABLE, // نستخدم المتغير اللي معرف فوق
-      Key: {
-        userId: id // التأكد من userId كما في الصورة
-      }
+      TableName: USERS_TABLE,
+      Key: { userId: id }
     }));
-
-    console.log(`✅ User ${id} deleted successfully`);
-    res.status(200).json({ message: "تم حذف الموظف بنجاح" });
+    res.status(200).json({ message: "تم الحذف بنجاح" });
   } catch (error) {
-    console.error("❌ DynamoDB Delete Error:", error);
-    res.status(500).json({ 
-      error: "فشل الحذف من السيرفر", 
-      details: error.message 
-    });
+    res.status(500).json({ error: error.message });
   }
 });
-
 // =========================
 // 6. الحوادث (INCIDENTS)
 // =========================
