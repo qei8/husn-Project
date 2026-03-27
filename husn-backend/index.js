@@ -197,13 +197,14 @@ app.patch("/api/users/:id/status", async (req, res) => {
 });
 
 // ابحثي عن دالة app.delete القديمة واستبدليها بهذي:
-app.delete('/api/users/:userId', async (req, res) => {
-  const { userId } = req.params; // الحين الـ ID يجي من الرابط مباشرة
-
+// الحذف باستخدام المسار المباشر (Path Parameter)
+app.delete('/api/users/:id', async (req, res) => {
+  const { id } = req.params; // الحين الـ ID يجي من الرابط نفسه
+  
   try {
     await ddb.send(new DeleteCommand({
       TableName: USERS_TABLE,
-      Key: { userId: userId } 
+      Key: { userId: id } // تأكدي أن userId هو اسم الحقل في DynamoDB
     }));
     res.status(200).json({ message: "تم الحذف بنجاح" });
   } catch (error) {

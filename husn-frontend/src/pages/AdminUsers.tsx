@@ -99,30 +99,25 @@ const AdminUsers = () => {
   }, [language]);
 
   // دالة الحذف المعدلة لتستخدم userId الصافي
- const handleDeleteUser = async (targetUserId: string, name: string) => {
-  const confirmMsg = language === 'ar' 
-    ? `هل أنتِ متأكدة من حذف الموظف (${name}) نهائياً؟` 
-    : `Are you sure you want to delete ${name} permanently?`;
-  
-  if (window.confirm(confirmMsg)) {
-    try {
-      // لاحظي الرابط صار ينتهي بـ / والـ ID مباشرة بدون علامة استفهام
-      const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users/${targetUserId}`, {
-        method: 'DELETE',
-      });
+ const handleDeleteUser = async (uId: string, fullName: string) => {
+  const confirmMsg = language === 'ar' ? `حذف ${fullName}؟` : `Delete ${fullName}?`;
+  if (!window.confirm(confirmMsg)) return;
 
-      if (response.ok) {
-        setUsers(prevUsers => prevUsers.filter(u => u.userId !== targetUserId));
-        toast.success(language === 'ar' ? 'تم حذف الموظف بنجاح' : 'User deleted successfully');
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Server Error:", response.status, errorData);
-        toast.error(language === 'ar' ? 'الموظف غير موجود أو فشل الحذف' : 'Delete failed');
-      }
-    } catch (error) {
-      console.error("Connection Error:", error);
-      toast.error(language === 'ar' ? 'خطأ في الاتصال بالسيرفر' : 'Connection error');
+  try {
+    // الرابط صار مباشر ونظيف: /api/users/E004
+    const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users/${uId}`, {
+      method: 'DELETE',
+    });
+
+    if (response.ok) {
+      setUsers(prevUsers => prevUsers.filter(u => u.userId !== uId));
+      toast.success(language === 'ar' ? 'تم الحذف' : 'Deleted');
+    } else {
+      console.error("Server Error Response:", response.status);
+      toast.error(language === 'ar' ? 'فشل الحذف من السيرفر' : 'Delete failed');
     }
+  } catch (error) {
+    toast.error('Connection error');
   }
 };
 
