@@ -106,9 +106,10 @@ const AdminUsers = () => {
   if (window.confirm(confirmMsg)) {
     try {
       // 2. إرسال طلب الحذف للباكيند (العنوان الجديد)
-      const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users/${id}`, {
-        method: 'DELETE',
-      });
+     // جربي نرسل الـ ID كـ Parameter بدال ما يكون جزء من الرابط
+const response = await fetch(`https://duwcseegvhq1t.cloudfront.net/api/users?userId=${id}`, {
+  method: 'DELETE',
+});
 
       if (response.ok) {
         // 3. إذا السيرفر رد بتم، نحذفه من القائمة اللي قدامنا فوراً
