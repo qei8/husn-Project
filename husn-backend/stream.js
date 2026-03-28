@@ -10,10 +10,10 @@ const config = {
     ping: 30,
     ping_timeout: 60
   },
-  http: {
-    port: parseInt(process.env.HTTP_PORT) || 8000,
+ http: {
+    port: 8000,
     allow_origin: '*',
-    mediaroot: '/home/ubuntu/husn-backend/media'
+    mediaroot: '/home/ubuntu/husn-backend/media' 
   },
 trans: {
     ffmpeg: '/usr/bin/ffmpeg',
