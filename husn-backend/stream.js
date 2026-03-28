@@ -1,16 +1,17 @@
+import 'dotenv/config';
 import NodeMediaServer from 'node-media-server';
 import { Server } from 'socket.io';
 
 const config = {
   rtmp: {
-    port: 1935,
+    port: parseInt(process.env.RTMP_PORT) || 1935, 
     chunk_size: 60000,
     gop_cache: true,
     ping: 30,
     ping_timeout: 60
   },
   http: {
-    port: 8000,
+    port: parseInt(process.env.HTTP_PORT) || 8000,
     allow_origin: '*',
     mediaroot: './media'
   },
@@ -20,8 +21,8 @@ const config = {
       {
         app: 'live',
         hls: true,
-        hlsFlags: '[hls_time=2:hls_list_size=3:flags=delete_segments]', // قللنا الوقت شوي لسرعة البث
-        hlsPath: './media/live', // 👈 أضيفي هذا المسار ضروري!
+        hlsFlags: '[hls_time=2:hls_list_size=3:flags=delete_segments]',
+        hlsPath: '/home/ubuntu/husn-backend/media/live', // 👈 هذا هو التعديل السحري!
         dash: true,
         dashFlags: '[f=dash:window_size=3:extra_window_size=5]'
       }
@@ -31,6 +32,7 @@ const config = {
 
 var nms = new NodeMediaServer(config);
 nms.run();
+
 
 // تشغيل السوكيت على بورت 8001
 const io = new Server(8001, {
