@@ -8,6 +8,9 @@ import bcrypt from "bcryptjs";
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 
+import { createServer } from "http";
+import { Server } from "socket.io";
+
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { 
@@ -20,6 +23,14 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 
 const app = express();
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*", // عشان يسمح لـ Vercel يكلمه
+    methods: ["GET", "POST"]
+  }
+});
 
 // ==========================================
 // 1. إعدادات الـ CORS
@@ -357,7 +368,7 @@ app.post("/api/2fa/verify", (req, res) => {
 // 7. تشغيل السيرفر
 // =========================
 const port = process.env.PORT || 8080;
-app.listen(port, "0.0.0.0", () => {
+httpServer.listen(port, "0.0.0.0", () => {
   console.log(`
   ==========================================
   🚀 HUSN Server is officially Online!
