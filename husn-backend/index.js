@@ -106,24 +106,31 @@ app.post("/api/auth/login", async (req, res) => {
     if (!isMatch) return res.status(401).json({ error: "كلمة المرور خاطئة" });
 
     // 🚀 الحركة الفتاكة: إذا المستخدم (قديم أو جديد) ما عنده مفتاح 2FA، نولد له واحد فوراً
-    let secret = user.twoFactorSecret;
-    let qrCode = null;
+   // داخل app.post("/api/auth/login", ...)
+// بعد التأكد من كلمة المرور:
 
-    if (!secret) {
-      const newSecret = speakeasy.generateSecret({ name: `HUSN:${user.userId}` });
-      secret = newSecret.base32;
-      
-      // حفظ المفتاح في DynamoDB فوراً
-      await ddb.send(new UpdateCommand({
-        TableName: USERS_TABLE,
-        Key: { userId },
-        UpdateExpression: "set twoFactorSecret = :s, is2FAEnabled = :e",
-        ExpressionAttributeValues: { ":s": secret, ":e": true }
-      }));
-      
-      // توليد الباركود عشان يظهر للمستخدم في أول دخول
-      qrCode = await QRCode.toDataURL(newSecret.otpauth_url);
+let userSecret = user.twoFactorSecret;
+let is2FA = user.is2FAEnabled;
+
+if (!userSecret) {
+  // 🚀 هنا السحر: الموظف القديم ما عنده عمود، فننشئ له واحد "حالا"
+  const secret = speakeasy.generateSecret({ name: `HUSN:${user.userId}` });
+  userSecret = secret.base32;
+  is2FA = true; // نخليه ترو غصب عشان يتفعل له
+
+  // تحديث DynamoDB وإضافة العمود اللي كان ناقص
+  await ddb.send(new UpdateCommand({
+    TableName: USERS_TABLE,
+    Key: { userId: user.userId },
+    UpdateExpression: "set twoFactorSecret = :s, is2FAEnabled = :e",
+    ExpressionAttributeValues: { 
+      ":s": userSecret, 
+      ":e": is2FA 
     }
+  }));
+  
+  console.log(`✅ تم تفعيل الـ 2FA وإضافة العمود للموظف: ${user.userId}`);
+}
 
     res.json({
       userId: user.userId,
