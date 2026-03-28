@@ -5,6 +5,9 @@ import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcryptjs";
 
+import speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
+
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { 
@@ -41,9 +44,6 @@ const BUCKET = process.env.S3_BUCKET_NAME;
 const INCIDENTS_TABLE = process.env.DDB_INCIDENTS_TABLE;
 const USERS_TABLE = process.env.DDB_USERS_TABLE;
 const MODEL_API_URL = process.env.MODEL_API_URL;
-
-const express = require('express');
-const multer = require('multer'); // لازم تثبتينه: npm install multer
 
 
 console.log("🚀 BOOTING HUSN SYSTEM...", {
@@ -276,6 +276,53 @@ app.post("/api/drone/frame", upload.single("file"), async (req, res) => {
   } catch (error) {
     console.error("❌ Error in /api/drone/frame:", error);
     res.status(500).json({ error: "Internal error" });
+  }
+});
+
+//Google Authenticator
+app.post("/api/2fa/setup", async (req, res) => {
+  const { userId } = req.body; // نستخدم رقم الموظف اللي دخل به
+  
+  // 1. توليد مفتاح سري جديد
+  const secret = speakeasy.generateSecret({
+    name: `HUSN-System:${userId}`
+  });
+
+  try {
+    // 2. حفظ المفتاح في DynamoDB للموظف هذا بالذات
+    await ddb.send(new UpdateCommand({
+      TableName: USERS_TABLE,
+      Key: { userId },
+      UpdateExpression: "set twoFactorSecret = :s, is2FAEnabled = :e",
+      ExpressionAttributeValues: { 
+        ":s": secret.base32, 
+        ":e": true 
+      }
+    }));
+
+    // 3. تحويل الرابط لباركود وإرساله للفرونت إند
+    QRCode.toDataURL(secret.otpauth_url, (err, data_url) => {
+      res.json({ qrCode: data_url });
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "فشل إعداد التحقق" });
+  }
+});
+
+app.post("/api/2fa/verify", (req, res) => {
+  const { userToken, userSecret } = req.body;
+
+  const verified = speakeasy.totp.verify({
+    secret: userSecret, // السر اللي جبناه من الداتا بيز للمستخدم
+    encoding: 'base32',
+    token: userToken // الـ 6 أرقام اللي دخلها من جواله
+  });
+
+  if (verified) {
+    res.json({ success: true, message: "تم التحقق! تفضل للداشبورد ✅" });
+  } else {
+    res.status(400).json({ success: false, message: "الرمز غلط يا بطل ❌" });
   }
 });
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { loginUser, changePassword } from "@/lib/usersApi"; 
+import { loginUser, changePassword, verify2FA } from "@/lib/usersApi"; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import fireDetectionHero from "@/assets/fire-detection-hero.jpg";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-type AuthStep = "LOGIN" | "NEW_PASSWORD";
+type AuthStep = "LOGIN" | "NEW_PASSWORD"| "TWO_FACTOR";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -34,7 +34,6 @@ const Login = () => {
 
   const [newPassword, setNewPassword] = useState("");
 
-  // --- 1. دالة تسجيل الدخول ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginData.employeeId || !loginData.password) {
@@ -43,21 +42,21 @@ const Login = () => {
     }
 
     setIsLoading(true);
-
     try {
       const result = await loginUser(loginData.employeeId, loginData.password);
-      
-      // حفظ بيانات المستخدم الأولية (بدون الباسوورد مؤقتاً)
       localStorage.setItem("user", JSON.stringify(result));
 
       if (result.isFirstLogin) {
         setStep("NEW_PASSWORD");
         toast.info(language === 'ar' ? "هذا دخولك الأول، يرجى تعيين كلمة مرور جديدة" : "First login: Please set a new password");
-      } else {
-        // إذا مو أول دخول، نخزن الباسوورد الحالي في الـ localStorage عشان صفحة الإعدادات تقارن صح
+      } 
+      else if (result.twoFactorEnabled) {
+        setStep("TWO_FACTOR");
+        toast.info(language === 'ar' ? "يرجى إدخال رمز التحقق من جوالك" : "Please enter the 2FA code from your phone");
+      } 
+      else {
         const fullUserData = { ...result, password: loginData.password };
         localStorage.setItem("user", JSON.stringify(fullUserData));
-        
         toast.success(language === 'ar' ? `مرحباً بك، ${result.name}` : `Welcome, ${result.name}`);
         navigate("/dashboard");
       }
@@ -68,27 +67,17 @@ const Login = () => {
     }
   };
 
-  // --- 2. دالة تحديث كلمة المرور (مربوطة بالـ API الجديد) ---
   const handleSetNewPassword = async () => {
     if (!newPassword || newPassword.length < 6) {
       toast.error(language === 'ar' ? "يرجى إدخال كلمة مرور جديدة (6 خانات على الأقل)" : "Password must be at least 6 characters");
       return;
     }
-
     setIsLoading(true);
     try {
-      // نرسل: المعرف، الباسوورد المؤقت (اللي دخل به)، والباسوورد الجديد
       await changePassword(loginData.employeeId, loginData.password, newPassword);
-      
-      // تحديث البيانات محلياً عشان السيستم يفتح
       const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
-      const updatedUser = { 
-        ...savedUser, 
-        password: newPassword, 
-        isFirstLogin: false 
-      };
+      const updatedUser = { ...savedUser, password: newPassword, isFirstLogin: false };
       localStorage.setItem("user", JSON.stringify(updatedUser));
-
       toast.success(language === 'ar' ? "تم تحديث كلمة المرور بنجاح" : "Password updated successfully");
       navigate("/dashboard");
     } catch (error: any) {
@@ -134,10 +123,65 @@ const Login = () => {
                   </button>
                 </div>
               </div>
-
               <Button onClick={handleSetNewPassword} className="w-full h-12 text-lg font-bold" disabled={isLoading}>
                 {isLoading && <Loader2 className="w-5 h-5 animate-spin ml-2" />}
                 {language === 'ar' ? "حفظ ومتابعة" : "Save & Continue"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "TWO_FACTOR") {
+    return (
+      <div className="min-h-screen bg-background tactical-grid flex items-center justify-center p-4" dir={currentDir}>
+        <div className="w-full max-w-md animate-slide-up">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 border border-primary/30 mb-4">
+              <Lock className="w-8 h-8 text-primary" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground mb-2">{language === 'ar' ? "التحقق الثنائي" : "2FA Verification"}</h1>
+            <p className="text-muted-foreground">{language === 'ar' ? "أدخل الرمز المكون من 6 أرقام من تطبيق Google" : "Enter the 6-digit code from your Google app"}</p>
+          </div>
+
+          <div className="panel p-6 border rounded-xl bg-card shadow-lg">
+            <div className="space-y-6">
+              <div className={`space-y-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                <Label htmlFor="otp">{language === 'ar' ? "رمز التحقق" : "Verification Code"}</Label>
+                <div className="relative">
+                  <Input
+                    id="otp"
+                    type="text"
+                    placeholder="000 000"
+                    maxLength={6}
+                    className="h-14 text-center text-2xl font-mono tracking-[0.3em]"
+                    autoFocus
+                    disabled={isLoading}
+                    onChange={async (e) => {
+                      const otp = e.target.value;
+                      if (otp.length === 6) {
+                        setIsLoading(true);
+                        try {
+                          const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+                          // 🚀 استدعاء دالة التحقق الحقيقية من أمازون
+                          await verify2FA(savedUser.userId, otp, savedUser.twoFactorSecret);
+                          toast.success(language === 'ar' ? "تم التحقق بنجاح ✅" : "Verified successfully");
+                          navigate("/dashboard");
+                        } catch (error: any) {
+                          toast.error(error.message || (language === 'ar' ? "الرمز غير صحيح" : "Invalid code"));
+                          e.target.value = ""; // نصفر الخانة لو الرمز خطأ
+                        } finally {
+                          setIsLoading(false);
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              <Button variant="outline" className="w-full h-10" onClick={() => setStep("LOGIN")} disabled={isLoading}>
+                {language === 'ar' ? "الرجوع للخلف" : "Go Back"}
               </Button>
             </div>
           </div>
@@ -181,7 +225,6 @@ const Login = () => {
                   />
                 </div>
               </div>
-
               <div className={`space-y-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
                 <Label htmlFor="password" className="text-sm font-semibold">{language === 'ar' ? "كلمة المرور" : "Password"}</Label>
                 <div className="relative">
@@ -202,7 +245,6 @@ const Login = () => {
                   </button>
                 </div>
               </div>
-
               <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={isLoading}>
                 {isLoading && <Loader2 className="w-5 h-5 animate-spin ml-2" />}
                 {language === 'ar' ? "دخول للنظام" : "Sign In"}

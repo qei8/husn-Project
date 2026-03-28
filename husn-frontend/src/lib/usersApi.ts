@@ -61,3 +61,18 @@ export const changePassword = async (userId: string, currentPass: string, newPas
   }
   return response.json();
 };
+
+export const verify2FA = async (userId: string, token: string, secret: string) => {
+  const response = await fetch(`${import.meta.env.VITE_API_URL}/api/2fa/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userToken: token, userSecret: secret }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || "الرمز غير صحيح");
+  }
+
+  return response.json();
+};
