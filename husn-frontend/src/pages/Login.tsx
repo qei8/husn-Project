@@ -58,10 +58,10 @@ const Login = () => {
       } 
       // 3. ثاني فحص (الأهم): هل الـ 2FA مفعل؟ 🚀
       // تأكدي إن الباكيند يرسل حقل اسمه twoFactorEnabled وقيمته true
-      else if (result.twoFactorEnabled === true || result.twoFactorSecret) {
-        setStep("TWO_FACTOR");
-        toast.info(language === 'ar' ? "يرجى إدخال رمز التحقق من جوالك" : "Please enter 2FA code");
-      } 
+      else if (result.twoFactorEnabled === true) { 
+      setStep("TWO_FACTOR");
+      toast.info(language === 'ar' ? "يرجى إدخال رمز التحقق من جوالك" : "Please enter 2FA code");
+    }
       // 4. إذا ما فيه لا هذا ولا هذا، يدخل الداشبورد
       else {
         const fullUserData = { ...result, password: loginData.password };

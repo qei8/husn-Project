@@ -87,7 +87,7 @@ async function analyzeImageWithModel(fileBuffer, fileName, contentType) {
   }
 }
 
-// =========================
+// // =========================
 // 4. نظام تسجيل الدخول (AUTH)
 // =========================
 app.post("/api/auth/login", async (req, res) => {
@@ -105,43 +105,44 @@ app.post("/api/auth/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: "كلمة المرور خاطئة" });
 
-    // 🚀 الحركة الفتاكة: إذا المستخدم (قديم أو جديد) ما عنده مفتاح 2FA، نولد له واحد فوراً
-   // داخل app.post("/api/auth/login", ...)
-// بعد التأكد من كلمة المرور:
+    // --- منطق الـ 2FA الإلزامي ---
+    let currentSecret = user.twoFactorSecret;
+    let currentQrCode = null;
 
-let userSecret = user.twoFactorSecret;
-let is2FA = user.is2FAEnabled;
-
-if (!userSecret) {
-  // 🚀 هنا السحر: الموظف القديم ما عنده عمود، فننشئ له واحد "حالا"
-  const secret = speakeasy.generateSecret({ name: `HUSN:${user.userId}` });
-  userSecret = secret.base32;
-  is2FA = true; // نخليه ترو غصب عشان يتفعل له
-
-  // تحديث DynamoDB وإضافة العمود اللي كان ناقص
-  await ddb.send(new UpdateCommand({
-    TableName: USERS_TABLE,
-    Key: { userId: user.userId },
-    UpdateExpression: "set twoFactorSecret = :s, is2FAEnabled = :e",
-    ExpressionAttributeValues: { 
-      ":s": userSecret, 
-      ":e": is2FA 
+    if (!currentSecret) {
+      // موظف قديم أو جديد ما عنده سكرت، نولد له واحد "حالا"
+      const secretObj = speakeasy.generateSecret({ name: `HUSN:${user.userId}` });
+      currentSecret = secretObj.base32;
+      
+      // تحديث DynamoDB فوراً
+      await ddb.send(new UpdateCommand({
+        TableName: USERS_TABLE,
+        Key: { userId: user.userId },
+        UpdateExpression: "set twoFactorSecret = :s, is2FAEnabled = :e",
+        ExpressionAttributeValues: { 
+          ":s": currentSecret, 
+          ":e": true 
+        }
+      }));
+      
+      // توليد الباركود
+      currentQrCode = await QRCode.toDataURL(secretObj.otpauth_url);
+      console.log(`✅ 2FA Auto-Enabled for: ${user.userId}`);
     }
-  }));
-  
-  console.log(`✅ تم تفعيل الـ 2FA وإضافة العمود للموظف: ${user.userId}`);
-}
 
+    // الرد النهائي بمسميات مطابقة لما يتوقعه الـ React
     res.json({
       userId: user.userId,
       name: user.name,
       role: user.role,
       isFirstLogin: user.isFirstLogin,
-      twoFactorEnabled: true, // الحين صار إلزامي للكل
-      twoFactorSecret: secret,
-      qrCode: qrCode // إذا كانت أول مرة، بيرجع له الباركود هنا
+      twoFactorEnabled: true,
+      twoFactorSecret: currentSecret, // لازم الاسم هنا يطابق المتغير اللي فوقه
+      qrCode: currentQrCode
     });
+
   } catch (e) {
+    console.error("Login Error:", e);
     res.status(500).json({ error: "فشل تسجيل الدخول" });
   }
 });
