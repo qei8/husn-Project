@@ -21,7 +21,7 @@ type AuthStep = "LOGIN" | "NEW_PASSWORD"| "TWO_FACTOR";
 const Login = () => {
   const navigate = useNavigate();
   const { language, t } = useLanguage();
-
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [step, setStep] = useState<AuthStep>("LOGIN");
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -44,16 +44,25 @@ const Login = () => {
     setIsLoading(true);
     try {
       const result = await loginUser(loginData.employeeId, loginData.password);
+      
+      // 1. حفظ البيانات الأساسية (عشان نستخدم الـ secret في الخطوة الجاية)
       localStorage.setItem("user", JSON.stringify(result));
 
+      if (result.qrCode) {
+      setQrCodeUrl(result.qrCode); // 🚀 حفظ رابط الباركود
+      }
+      // 2. أول فحص: هل هو دخول أول مرة؟
       if (result.isFirstLogin) {
         setStep("NEW_PASSWORD");
-        toast.info(language === 'ar' ? "هذا دخولك الأول، يرجى تعيين كلمة مرور جديدة" : "First login: Please set a new password");
+        toast.info(language === 'ar' ? "يرجى تعيين كلمة مرور جديدة" : "Please set a new password");
       } 
-      else if (result.twoFactorEnabled) {
+      // 3. ثاني فحص (الأهم): هل الـ 2FA مفعل؟ 🚀
+      // تأكدي إن الباكيند يرسل حقل اسمه twoFactorEnabled وقيمته true
+      else if (result.twoFactorEnabled === true || result.twoFactorSecret) {
         setStep("TWO_FACTOR");
-        toast.info(language === 'ar' ? "يرجى إدخال رمز التحقق من جوالك" : "Please enter the 2FA code from your phone");
+        toast.info(language === 'ar' ? "يرجى إدخال رمز التحقق من جوالك" : "Please enter 2FA code");
       } 
+      // 4. إذا ما فيه لا هذا ولا هذا، يدخل الداشبورد
       else {
         const fullUserData = { ...result, password: loginData.password };
         localStorage.setItem("user", JSON.stringify(fullUserData));
@@ -61,7 +70,7 @@ const Login = () => {
         navigate("/dashboard");
       }
     } catch (error: any) {
-      toast.error(error.message || (language === 'ar' ? "فشل تسجيل الدخول" : "Login failed"));
+      toast.error(error.message || "فشل تسجيل الدخول");
     } finally {
       setIsLoading(false);
     }
@@ -134,61 +143,72 @@ const Login = () => {
     );
   }
 
-  if (step === "TWO_FACTOR") {
-    return (
-      <div className="min-h-screen bg-background tactical-grid flex items-center justify-center p-4" dir={currentDir}>
-        <div className="w-full max-w-md animate-slide-up">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 border border-primary/30 mb-4">
-              <Lock className="w-8 h-8 text-primary" />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground mb-2">{language === 'ar' ? "التحقق الثنائي" : "2FA Verification"}</h1>
-            <p className="text-muted-foreground">{language === 'ar' ? "أدخل الرمز المكون من 6 أرقام من تطبيق Google" : "Enter the 6-digit code from your Google app"}</p>
+ if (step === "TWO_FACTOR") {
+  return (
+    <div className="min-h-screen bg-background tactical-grid flex items-center justify-center p-4" dir={currentDir}>
+      <div className="w-full max-w-md animate-slide-up">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 border border-primary/30 mb-4">
+            <Lock className="w-8 h-8 text-primary" />
           </div>
+          <h1 className="text-2xl font-bold text-foreground mb-2">
+            {language === 'ar' ? "تأمين الحساب" : "Secure Your Account"}
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            {qrCodeUrl 
+              ? (language === 'ar' ? "امسح الباركود بتطبيق Google Authenticator لتفعيل الحماية" : "Scan the QR code with Google Authenticator to enable MFA")
+              : (language === 'ar' ? "أدخل الرمز المكون من 6 أرقام من جوالك" : "Enter the 6-digit code from your phone")}
+          </p>
+        </div>
 
-          <div className="panel p-6 border rounded-xl bg-card shadow-lg">
-            <div className="space-y-6">
-              <div className={`space-y-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
-                <Label htmlFor="otp">{language === 'ar' ? "رمز التحقق" : "Verification Code"}</Label>
-                <div className="relative">
-                  <Input
-                    id="otp"
-                    type="text"
-                    placeholder="000 000"
-                    maxLength={6}
-                    className="h-14 text-center text-2xl font-mono tracking-[0.3em]"
-                    autoFocus
-                    disabled={isLoading}
-                    onChange={async (e) => {
-                      const otp = e.target.value;
-                      if (otp.length === 6) {
-                        setIsLoading(true);
-                        try {
-                          const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
-                          // 🚀 استدعاء دالة التحقق الحقيقية من أمازون
-                          await verify2FA(savedUser.userId, otp, savedUser.twoFactorSecret);
-                          toast.success(language === 'ar' ? "تم التحقق بنجاح ✅" : "Verified successfully");
-                          navigate("/dashboard");
-                        } catch (error: any) {
-                          toast.error(error.message || (language === 'ar' ? "الرمز غير صحيح" : "Invalid code"));
-                          e.target.value = ""; // نصفر الخانة لو الرمز خطأ
-                        } finally {
-                          setIsLoading(false);
-                        }
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-              <Button variant="outline" className="w-full h-10" onClick={() => setStep("LOGIN")} disabled={isLoading}>
-                {language === 'ar' ? "الرجوع للخلف" : "Go Back"}
-              </Button>
+        <div className="panel p-6 border rounded-xl bg-card shadow-lg text-center">
+          {/* 📸 عرض الباركود فقط لو كان الموظف يفعله لأول مرة */}
+          {qrCodeUrl && (
+            <div className="mb-6 p-4 bg-white rounded-lg inline-block border-4 border-primary/20">
+              <img src={qrCodeUrl} alt="2FA QR Code" className="w-48 h-48 mx-auto" />
+              <p className="text-[10px] text-black font-bold mt-2 uppercase tracking-widest">Scan Me</p>
             </div>
+          )}
+
+          <div className="space-y-6">
+            <div className={`space-y-2 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+              <Label htmlFor="otp">{language === 'ar' ? "رمز التحقق" : "Verification Code"}</Label>
+              <Input
+                id="otp"
+                type="text"
+                placeholder="000 000"
+                maxLength={6}
+                className="h-14 text-center text-3xl font-mono tracking-[0.3em] border-2 focus:border-primary"
+                autoFocus
+                onChange={async (e) => {
+                  const otp = e.target.value;
+                  if (otp.length === 6) {
+                    setIsLoading(true);
+                    try {
+                      const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+                      await verify2FA(savedUser.userId, otp, savedUser.twoFactorSecret);
+                      toast.success(language === 'ar' ? "تم التحقق بنجاح ✅" : "Verified successfully");
+                      navigate("/dashboard");
+                    } catch (error: any) {
+                      toast.error(error.message || "الرمز غير صحيح");
+                      e.target.value = "";
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }
+                }}
+              />
+            </div>
+
+            <Button variant="ghost" className="w-full text-xs underline" onClick={() => setStep("LOGIN")}>
+              {language === 'ar' ? "إلغاء والرجوع للخلف" : "Cancel and Go Back"}
+            </Button>
           </div>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen bg-background flex" dir={currentDir}>

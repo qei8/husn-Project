@@ -100,22 +100,41 @@ app.post("/api/auth/login", async (req, res) => {
 
     const user = result.Item;
     if (!user) return res.status(404).json({ error: "الموظف غير موجود" });
-
-    if (user.status === "Inactive") {
-      return res.status(403).json({ error: "حسابك معطل حالياً، تواصل مع الإدارة" });
-    }
+    if (user.status === "Inactive") return res.status(403).json({ error: "حسابك معطل" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: "كلمة المرور خاطئة" });
+
+    // 🚀 الحركة الفتاكة: إذا المستخدم (قديم أو جديد) ما عنده مفتاح 2FA، نولد له واحد فوراً
+    let secret = user.twoFactorSecret;
+    let qrCode = null;
+
+    if (!secret) {
+      const newSecret = speakeasy.generateSecret({ name: `HUSN:${user.userId}` });
+      secret = newSecret.base32;
+      
+      // حفظ المفتاح في DynamoDB فوراً
+      await ddb.send(new UpdateCommand({
+        TableName: USERS_TABLE,
+        Key: { userId },
+        UpdateExpression: "set twoFactorSecret = :s, is2FAEnabled = :e",
+        ExpressionAttributeValues: { ":s": secret, ":e": true }
+      }));
+      
+      // توليد الباركود عشان يظهر للمستخدم في أول دخول
+      qrCode = await QRCode.toDataURL(newSecret.otpauth_url);
+    }
 
     res.json({
       userId: user.userId,
       name: user.name,
       role: user.role,
-      isFirstLogin: user.isFirstLogin
+      isFirstLogin: user.isFirstLogin,
+      twoFactorEnabled: true, // الحين صار إلزامي للكل
+      twoFactorSecret: secret,
+      qrCode: qrCode // إذا كانت أول مرة، بيرجع له الباركود هنا
     });
   } catch (e) {
-    console.error(e);
     res.status(500).json({ error: "فشل تسجيل الدخول" });
   }
 });
