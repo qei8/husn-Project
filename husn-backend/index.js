@@ -358,9 +358,9 @@ app.post("/api/2fa/verify", (req, res) => {
   });
 
   if (verified) {
-    res.json({ success: true, message: "تم التحقق! تفضل للداشبورد ✅" });
+    res.json({ success: true, message: "تم التحقق! ✅" });
   } else {
-    res.status(400).json({ success: false, message: "الرمز غلط يا بطل ❌" });
+    res.status(400).json({ success: false, message: "الرمز خاطئ ❌" });
   }
 });
 
