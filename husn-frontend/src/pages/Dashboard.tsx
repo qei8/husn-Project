@@ -67,7 +67,7 @@ useEffect(() => {
   });
 
   socket.on("connect", () => {
-    console.log("✅ Socket Connected via CloudFront Proxy");
+    console.log("✅ Socket Connected directly to HUSN Server");
     toast.success(language === 'ar' ? "متصل بالدرون آمن" : "UAV Securely Connected");
   });
 
