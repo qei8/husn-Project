@@ -80,10 +80,10 @@ const AdminUsers = () => {
   const fetchUsers = async () => {
     try {
       const res = await fetch(
-        "https://husn-project.online/api/users", // 🔥 غيري الرابط هنا للدومين الجديد
+        "https://husn-project.online/api/users", 
         { cache: "no-store" } 
       );
-    const data = await res.json();
+      const data = await res.json();
     const formattedUsers = data.map((u: any) => ({
       id: u.userId, 
       userId: u.userId, 
@@ -94,9 +94,9 @@ const AdminUsers = () => {
     }));
     setUsers(formattedUsers);
   } catch (error) {
-    toast.error(language === 'ar' ? "فشل جلب البيانات" : "Fetch failed");
-  }
-};
+      toast.error(language === 'ar' ? "فشل جلب البيانات" : "Fetch failed");
+    }
+  };
 
 useEffect(() => {
   fetchUsers();
