@@ -1,5 +1,5 @@
 // تأكدي إن الرابط ينتهي بـ /api فقط بدون تكرار
-const API_BASE = "http://13.62.189.199:8080/api";
+const API_BASE = "https://husn-project.online/api";
 
 export async function getIncidents(limit = 20) {
   try {
