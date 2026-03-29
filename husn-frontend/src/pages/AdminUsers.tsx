@@ -76,12 +76,13 @@ const AdminUsers = () => {
   }, [navigate, language]);
 
   // جلب البيانات من السيرفر
+ // جلب البيانات من السيرفر الجديد بـ HTTPS
   const fetchUsers = async () => {
-  try {
-    const res = await fetch(
-      "https://duwcseegvhq1t.cloudfront.net/api/users",
-      { cache: "no-store" } // 🔥 يمنع الكاش القديم ويرجع أحدث بيانات
-    );
+    try {
+      const res = await fetch(
+        "https://husn-project.online/api/users", // 🔥 غيري الرابط هنا للدومين الجديد
+        { cache: "no-store" } 
+      );
     const data = await res.json();
     const formattedUsers = data.map((u: any) => ({
       id: u.userId, 
@@ -109,14 +110,13 @@ const handleDeleteUser = async (uId: string) => {
     : `Are you sure you want to delete user (${uId})?`;
 
   if (!window.confirm(confirmMsg)) return;
-
-  try {
-    // 🔥 التعديل الجذري: تأكدنا من وجود / قبل الـ ID وإضافة منع الكاش
+try {
+    // 🔥 التعديل الصحيح: نستخدم الدومين الجديد حقنا بـ HTTPS
     const response = await fetch(
-      `https://duwcseegvhq1t.cloudfront.net/api/users/${uId}`, 
+      `https://husn-project.online/api/users/${uId}`, 
       {
         method: 'DELETE',
-        cache: 'no-cache', // يمنع المتصفح من استهلاك روابط قديمة
+        cache: 'no-cache', 
         headers: {
           'Content-Type': 'application/json'
         }

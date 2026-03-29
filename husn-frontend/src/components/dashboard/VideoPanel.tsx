@@ -19,7 +19,7 @@ interface VideoPanelProps {
 }
 
 const STREAM_URL =
-  import.meta.env.VITE_STREAM_URL || 'http://13.62.189.199:8005/index.m3u8';
+  import.meta.env.VITE_STREAM_URL || 'https://husn-project.online/live/index.m3u8';
   
 const VideoPanel = ({ telemetry }: VideoPanelProps) => {
   const [isRecording, setIsRecording] = useState(false);
