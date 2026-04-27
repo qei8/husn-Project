@@ -11,7 +11,8 @@ import {
   VolumeX,
   Sun,
   Moon,
-  Users 
+  Users,
+  Phone // تم إضافة أيقونة الهاتف
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -37,8 +38,6 @@ const DashboardHeader = ({ onMenuClick }: DashboardHeaderProps) => {
   
   const [currentUser, setCurrentUser] = useState<{name: string, role: string} | null>(null);
 
-
-  
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
@@ -58,28 +57,22 @@ const DashboardHeader = ({ onMenuClick }: DashboardHeaderProps) => {
     setLanguage(language === 'en' ? 'ar' : 'en');
   };
 
- const handleLogout = async () => {
-  try {
-    // 1. إبلاغ أمازون بإغلاق الجلسة فوراً
-    await signOut(); 
-    
-    // 2. تنظيف بيانات المستخدم من المتصفح (شغلنا المحلي)
-    localStorage.removeItem("user");
-    
-    // 3. توجيه المستخدم لصفحة الدخول
-    navigate('/login');
-    
-    toast.success(language === 'ar' ? "تم تسجيل الخروج بأمان" : "Logged out safely");
-  } catch (error) {
-    console.error('Error signing out: ', error);
-    // حتى لو فشل الاتصال بأمازون، نمسح البيانات المحلية للأمان
-    localStorage.removeItem("user");
-    navigate('/login');
-  }
-};
+  const handleLogout = async () => {
+    try {
+      await signOut(); 
+      localStorage.removeItem("user");
+      navigate('/login');
+      toast.success(language === 'ar' ? "تم تسجيل الخروج بأمان" : "Logged out safely");
+    } catch (error) {
+      console.error('Error signing out: ', error);
+      localStorage.removeItem("user");
+      navigate('/login');
+    }
+  };
+
   return (
     <header className="h-14 border-b border-border bg-card/50 backdrop-blur-sm px-4 flex items-center justify-between sticky top-0 z-40">
-      {/* Left Section - جعلنا اللوجو يرجع للداشبورد عند الضغط عليه */}
+      {/* Left Section */}
       <div className="flex items-center gap-4">
         <Button size="icon" variant="ghost" className="md:hidden" onClick={onMenuClick}>
           <Menu className="w-5 h-5" />
@@ -109,6 +102,19 @@ const DashboardHeader = ({ onMenuClick }: DashboardHeaderProps) => {
 
       {/* Right Section */}
       <div className="flex items-center gap-2">
+        {/* زر اتصال الطوارئ بالدفاع المدني - مضاف حديثاً */}
+        <Button 
+          variant="destructive" 
+          size="sm" 
+          className="bg-red-600 hover:bg-red-700 animate-pulse font-bold hidden sm:flex items-center gap-2 h-9"
+          asChild
+        >
+          <a href="tel:998">
+            <Phone className="w-4 h-4" />
+            {language === 'ar' ? 'بلاغ (998)' : 'Call 998'}
+          </a>
+        </Button>
+
         <Button size="icon" variant="ghost" onClick={toggleLanguage}>
           <Languages className="w-5 h-5" />
         </Button>
