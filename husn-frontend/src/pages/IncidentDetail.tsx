@@ -7,8 +7,6 @@ import {
   MapPin, 
   Clock, 
   CheckCircle2, 
-  ChevronLeft, 
-  ChevronRight,
   AlertTriangle,
   FileText,
   Flag,
@@ -250,6 +248,19 @@ const IncidentDetail = () => {
                 </div>
               </div>
             </div>
+
+            {/* 🚀 إضافة زر الإبلاغ عن خطأ (Flag) هنا في الأسفل */}
+            <div className="panel p-4 space-y-2">
+              <Button 
+                variant="ghost" 
+                className="w-full text-muted-foreground hover:text-destructive justify-start" 
+                onClick={() => toast.info(isRTL ? 'تم الإبلاغ عن الإنذار الكاذب' : 'False positive reported')}
+              >
+                <Flag className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                {t('reportFalsePositive')}
+              </Button>
+            </div>
+
           </div>
         </div>
       </main>

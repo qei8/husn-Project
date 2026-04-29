@@ -8,11 +8,12 @@ import {
   Clock, 
   FileText, 
   Eye,
-  Loader2 // أيقونة التحميل
+  Loader2 
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { io } from 'socket.io-client'; // 👈 ضفنا السوكت هنا
 
 const Incidents = () => {
   const navigate = useNavigate();
@@ -52,6 +53,41 @@ const Incidents = () => {
     };
 
     fetchAllIncidents();
+  }, []);
+
+  // 🚀 الاستماع للتحديثات المباشرة (Socket.io)
+  useEffect(() => {
+    const socket = io("https://husn-project.online", { path: "/socket.io" });
+
+    // 1. تحديث حالة بلاغ موجود (Active/Resolved)
+    socket.on("incident-status-updated", ({ id, status }) => {
+      setIncidents((prev) => 
+        prev.map((incident) => 
+          incident.id === id ? { ...incident, status } : incident
+        )
+      );
+    });
+
+    // 2. إضافة بلاغ جديد أول ما يوصل من الدرون
+    socket.on("new-incident", (newIncident: any) => {
+      const formattedIncident = {
+        id: newIncident.incidentId,
+        status: newIncident.status?.toLowerCase() || 'active',
+        location: { 
+          name: `إحداثيات: ${Number(newIncident.lat ?? 0).toFixed(4)}, ${Number(newIncident.lng ?? 0).toFixed(4)}` 
+        },
+        startTime: newIncident.detectionTime,
+        confidence: Number(newIncident.confidence ?? 0.9),
+        thumbnail: newIncident.s3Key 
+          ? `https://husn-fire-images.s3.eu-north-1.amazonaws.com/${newIncident.s3Key}` 
+          : null
+      };
+
+      // إضافة البلاغ الجديد في أول القائمة
+      setIncidents((prev) => [formattedIncident, ...prev]);
+    });
+
+    return () => { socket.disconnect(); };
   }, []);
 
   return (
