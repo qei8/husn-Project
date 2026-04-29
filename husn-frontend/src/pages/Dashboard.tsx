@@ -244,18 +244,21 @@ const Dashboard = () => {
         </div>
       </main>
 
-      {/* 🚀 تم تعديل زر onConfirm عشان يكلم السيرفر ويفحص الحالة */}
+     {/* التنبيه المنبثق عند رصد حريق جديد */}
       {centeredAlert && (
         <CenteredAlert 
           alert={centeredAlert} 
           onViewDetails={() => handleViewDetails(centeredAlert)} 
           onConfirm={() => {
+            // 🛑 شرط الحماية: إذا كان البلاغ خلاص انحل، نمنع المستخدم يرجعه أكتف
             if (centeredAlert.status === 'resolved') {
-              toast.error(language === 'ar' ? "الحادث مغلق مسبقاً ولا يمكن تفعيله" : "Incident already resolved");
-            } else {
-              updateIncidentStatus(centeredAlert.id, 'active');
+              toast.error(language === 'ar' ? "هذا البلاغ تم حله مسبقاً ولا يمكن إعادة تفعيله" : "Incident already resolved");
+              return; // نوقف هنا وما نكمل للسيرفر
             }
-            setCenteredAlert(null); // نقفل التنبيه بعد ما نخلص
+
+            // ✅ إذا كان لسه جديد أو معلق، نحوله لـ Active في الداتا بيز
+            updateIncidentStatus(centeredAlert.id, 'active');
+            setCenteredAlert(null); // نقفل الشاشة بعد التأكيد
           }} 
           onDismiss={() => setCenteredAlert(null)} 
         />

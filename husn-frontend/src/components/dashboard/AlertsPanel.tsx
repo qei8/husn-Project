@@ -4,13 +4,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   AlertTriangle, 
   CheckCircle2, 
-  XCircle, 
   Eye,
   Clock,
   MapPin,
 } from 'lucide-react';
 import { Alert } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
+import { ar, enUS } from 'date-fns/locale'; // استيراد اللغات
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface AlertsPanelProps {
@@ -21,7 +21,8 @@ interface AlertsPanelProps {
 }
 
 const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPanelProps) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const isRTL = language === 'ar'; // تحديد اتجاه اللغة
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -49,12 +50,12 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
   };
 
   return (
-    <div className="panel h-full flex flex-col">
+    <div className="panel h-full flex flex-col" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="panel-header">
         <div className="flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-destructive" />
           <span className="panel-title">{t('alertHistory')}</span>
-          <Badge variant="secondary" className="ml-2">{alerts.length}</Badge>
+          <Badge variant="secondary" className={` ${isRTL ? 'mr-2' : 'ml-2'}`}>{alerts.length}</Badge>
         </div>
       </div>
 
@@ -62,7 +63,7 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
         <div className="p-2 space-y-2">
           {alerts.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground text-xs italic">
-              No recent alerts
+              {isRTL ? 'لا توجد تنبيهات حديثة' : 'No recent alerts'}
             </div>
           ) : (
             alerts.map((alert) => (
@@ -77,12 +78,13 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${
+                    <div className={`w-2 h-2 shrink-0 rounded-full ${
                       alert.status === 'active' ? 'bg-destructive animate-pulse' : 
                       alert.status === 'pending' ? 'bg-warning' : 'bg-muted-foreground'
                     }`} />
                     <span className="font-medium text-[10px] font-mono opacity-70">
-                      {alert.id.split('-')[0]}...
+                      {/* ناخذ الجزء الأول من الـ UUID عشان يكون مميز */}
+                      {alert.id.split('-')[1]?.substring(0, 6) || alert.id}...
                     </span>
                   </div>
                   {getStatusBadge(alert.status)}
@@ -90,7 +92,7 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
 
                 {/* Location */}
                 <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
-                  <MapPin className="w-3 h-3" />
+                  <MapPin className="w-3 h-3 shrink-0" />
                   <span className="truncate">{alert.location.name}</span>
                 </div>
 
@@ -98,16 +100,19 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${getSeverityColor(alert.severity)}`}>
-                      {alert.confidence}% {t('detectionConfidence')}
+                      {Math.round(alert.confidence > 1 ? alert.confidence : alert.confidence * 100)}% {t('detectionConfidence')}
                     </span>
                   </div>
                   <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <Clock className="w-3 h-3" />
-                    <span>{formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true })}</span>
+                    <Clock className="w-3 h-3 shrink-0" />
+                    <span>{formatDistanceToNow(new Date(alert.timestamp), { 
+                      addSuffix: true,
+                      locale: isRTL ? ar : enUS // دعم اللغة العربية للوقت
+                    })}</span>
                   </div>
                 </div>
 
-                {/* Actions */}
+                {/* Actions (تظهر فقط لو كان نشط أو معلق) */}
                 {(alert.status === 'active' || alert.status === 'pending') && (
                   <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button 
@@ -116,8 +121,7 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
                       className="flex-1 h-7 text-[10px]"
                       onClick={() => onViewDetails(alert)}
                     >
-                      <Eye className="w-3 h-3 mr-1" />
-                      {/* الزر اللي بجمب التأكيد غيرناه من t('map') إلى t('view') */}
+                      <Eye className={`w-3 h-3 ${isRTL ? 'ml-1' : 'mr-1'}`} />
                       {t('view')}
                     </Button>
                     <Button 
@@ -126,7 +130,7 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
                       className="flex-1 h-7 text-[10px]"
                       onClick={() => onConfirm(alert.id)}
                     >
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                      <CheckCircle2 className={`w-3 h-3 ${isRTL ? 'ml-1' : 'mr-1'}`} />
                       {t('confirmAlert')}
                     </Button>
                   </div>
