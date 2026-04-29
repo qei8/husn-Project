@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // استيراد المكونات
-import DashboardHeader from '@/components/layout/DashboardHeader'; // تأكدي أن المسار صحيح
+import DashboardHeader from '@/components/layout/DashboardHeader';
 import VideoPanel from '@/components/dashboard/VideoPanel';
 import MapPanel from '@/components/dashboard/MapPanel';
 import AlertsPanel from '@/components/dashboard/AlertsPanel';
@@ -49,62 +49,74 @@ const Dashboard = () => {
 
   // جلب بيانات المستخدم
   useEffect(() => {
-  const savedUser = localStorage.getItem("user");
-  if (savedUser) {
-    const parsed = JSON.parse(savedUser);
-    // تأكدي إن parsed.role قيمتها بالضبط 'admin'
-    setCurrentUser({
-      name: parsed.name,
-      role: parsed.role.toLowerCase() // تحويل لسمول للضمان
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) {
+      const parsed = JSON.parse(savedUser);
+      setCurrentUser({
+        name: parsed.name,
+        role: parsed.role.toLowerCase() 
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    const socket = io("https://husn-project.online", {
+      path: "/socket.io"
     });
-  }
-}, []);
-useEffect(() => {
-  // غيري الرابط للأي بي حق سيرفرك وبورت السوكت (8080 أو 8001 حسب اللي شغال)
-  const socket = io("https://husn-project.online", {
-  path: "/socket.io"
-});
 
-  socket.on("connect", () => {
-    console.log("✅ Socket Connected directly to HUSN Server");
-    toast.success(language === 'ar' ? "متصل بالدرون آمن" : "UAV Securely Connected");
-  });
+    socket.on("connect", () => {
+      console.log("✅ Socket Connected directly to HUSN Server");
+      toast.success(language === 'ar' ? "متصل بالدرون آمن" : "UAV Securely Connected");
+    });
 
-  // 🚀 الحركة الفتاكة: استقبال بلاغ الحريق فوراً من YOLO
-  socket.on("new-incident", (incident: any) => {
-    console.log("🔥 HUSN Alert Received:", incident);
-    
-    // تحويل البيانات لتناسب تنسيق الـ Alert في الفرونت
-    const newAlert: Alert = {
-      id: incident.incidentId,
-      timestamp: incident.detectionTime,
-      confidence: Number(incident.confidence ?? 0),
-      severity: Number(incident.confidence ?? 0) >= 95 ? 'critical' : 'high',
-      status: 'active',
-      location: {
-        lat: Number(incident.lat ?? 0),
-        lon: Number(incident.lng ?? 0),
-        name: `Lat ${incident.lat}, Lon ${incident.lng}`
-      },
-      thumbnail: incident.s3Key ? `https://husn-fire-images.s3.eu-north-1.amazonaws.com/${incident.s3Key}` : undefined,
-    };
+    // 🚁 استقبال بيانات الدرون الحية وتحديث الشاشة
+    socket.on("telemetry-update", (data: any) => {
+      setTelemetry(prev => ({
+        ...prev,
+        ...data, 
+        timestamp: new Date().toISOString()
+      }));
+    });
 
-    // إضافة البلاغ في أول القائمة فوراً
-    setAlerts(prev => [newAlert, ...prev]);
-    
-    // إظهار تنبيه منبثق للمستخدم
-    setCenteredAlert(newAlert);
-    toast.error(language === 'ar' ? "⚠️ تم رصد حريق جديد!" : "⚠️ New Fire Detected!");
-  });
+    // تحديث الحالة لايف عبر السوكت
+    socket.on("incident-status-updated", ({ id, status }) => {
+      setAlerts(prev => prev.map(alert => 
+        alert.id === id ? { ...alert, status } : alert
+      ));
+      setCenteredAlert(prev => prev?.id === id ? { ...prev, status } : prev);
+    });
 
-  socket.on("connect_error", (err) => {
-    console.error("❌ Socket Error:", err.message);
-  });
+    // 🚀 استقبال بلاغ الحريق فوراً
+    socket.on("new-incident", (incident: any) => {
+      console.log("🔥 HUSN Alert Received:", incident);
+      
+      const newAlert: Alert = {
+        id: incident.incidentId,
+        timestamp: incident.detectionTime,
+        confidence: Number(incident.confidence ?? 0),
+        severity: Number(incident.confidence ?? 0) >= 95 ? 'critical' : 'high',
+        status: 'active',
+        location: {
+          lat: Number(incident.lat ?? 0),
+          lon: Number(incident.lng ?? 0),
+          name: `Lat ${incident.lat}, Lon ${incident.lng}`
+        },
+        thumbnail: incident.s3Key ? `https://husn-fire-images.s3.eu-north-1.amazonaws.com/${incident.s3Key}` : undefined,
+      };
 
-  return () => { socket.disconnect(); };
-}, [language]);
+      setAlerts(prev => [newAlert, ...prev]);
+      setCenteredAlert(newAlert);
+      toast.error(language === 'ar' ? "⚠️ تم رصد حريق جديد!" : "⚠️ New Fire Detected!");
+    });
 
-  // جلب البلاغات
+    socket.on("connect_error", (err) => {
+      console.error("❌ Socket Error:", err.message);
+    });
+
+    return () => { socket.disconnect(); };
+  }, [language]);
+
+  // جلب البلاغات القديمة
   useEffect(() => {
     const loadIncidents = async () => {
       try {
@@ -126,7 +138,6 @@ useEffect(() => {
       } catch (e) { console.error(e); }
     };
     loadIncidents();
-   
   }, []);
 
   // جلب الطقس
@@ -138,14 +149,33 @@ useEffect(() => {
 
   const handleViewDetails = (alert: Alert) => navigate(`/incidents/${alert.id}`);
 
+  // 🚀 الدالة الجديدة: تحديث الحالة في قاعدة البيانات (DynamoDB)
+  const updateIncidentStatus = async (incidentId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`https://husn-project.online/api/incidents/${incidentId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success(language === 'ar' ? "تم تحديث الحالة" : "Status Updated");
+      } else {
+        toast.error(data.error || (language === 'ar' ? "خطأ في التحديث" : "Update failed"));
+      }
+    } catch (error) {
+      console.error("خطأ في الاتصال:", error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       
-      {/* الهيدر الموحد */}
       <DashboardHeader />
       
       <main className="p-4">
-        {/* الصف الأول: البث المباشر والخريطة */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
           <div className="lg:col-span-2 h-[400px]">
             <VideoPanel telemetry={telemetry} />
@@ -155,7 +185,6 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* الصف الثاني: التنبيهات والطقس/الإجراءات */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 h-[350px]">
             <AlertsPanel 
@@ -167,28 +196,25 @@ useEffect(() => {
           </div>
 
          <div className="panel p-4 flex flex-col justify-between h-[350px]">
-  <div>
-    <h3 className="panel-title mb-4 font-bold">{t('quickActions')}</h3>
-    <div className="space-y-2">
-      {/* هذا الزر يظهر للجميع */}
-      <Button variant="tactical" className="w-full justify-start" onClick={() => navigate('/incidents')}>
-        <AlertCircle className={`w-4 h-4 ${language === 'ar' ? 'ml-3' : 'mr-3'}`} /> {t('viewAllIncidents')}
-      </Button>
+          <div>
+            <h3 className="panel-title mb-4 font-bold">{t('quickActions')}</h3>
+            <div className="space-y-2">
+              <Button variant="tactical" className="w-full justify-start" onClick={() => navigate('/incidents')}>
+                <AlertCircle className={`w-4 h-4 ${language === 'ar' ? 'ml-3' : 'mr-3'}`} /> {t('viewAllIncidents')}
+              </Button>
 
-      {/* حماية قوية: الزر لن يظهر في الـ DOM أبداً إلا إذا كان المستخدم admin */}
-      {currentUser && currentUser.role === 'admin' && (
-        <Button variant="tactical" className="w-full justify-start" onClick={() => navigate('/admin-users')}>
-          <Users className={`w-4 h-4 ${language === 'ar' ? 'ml-3' : 'mr-3'}`} /> {t('manageUsers')}
-        </Button>
-      )}
+              {currentUser && currentUser.role === 'admin' && (
+                <Button variant="tactical" className="w-full justify-start" onClick={() => navigate('/admin-users')}>
+                  <Users className={`w-4 h-4 ${language === 'ar' ? 'ml-3' : 'mr-3'}`} /> {t('manageUsers')}
+                </Button>
+              )}
 
-      <Button variant="tactical" className="w-full justify-start" onClick={() => navigate('/settings')}>
-        <Settings className={`w-4 h-4 ${language === 'ar' ? 'ml-3' : 'mr-3'}`} /> {t('systemSettings')}
-      </Button>
-    </div>
-  </div>
+              <Button variant="tactical" className="w-full justify-start" onClick={() => navigate('/settings')}>
+                <Settings className={`w-4 h-4 ${language === 'ar' ? 'ml-3' : 'mr-3'}`} /> {t('systemSettings')}
+              </Button>
+            </div>
+          </div>
 
-            {/* قسم حالة الطقس المرن */}
             {weather && (
               <div className="mt-4 pt-4 border-t border-border">
                 <h4 className="data-label mb-4 flex items-center gap-2 text-primary font-bold">
@@ -218,11 +244,19 @@ useEffect(() => {
         </div>
       </main>
 
+      {/* 🚀 تم تعديل زر onConfirm عشان يكلم السيرفر ويفحص الحالة */}
       {centeredAlert && (
         <CenteredAlert 
           alert={centeredAlert} 
           onViewDetails={() => handleViewDetails(centeredAlert)} 
-          onConfirm={() => setCenteredAlert(null)} 
+          onConfirm={() => {
+            if (centeredAlert.status === 'resolved') {
+              toast.error(language === 'ar' ? "الحادث مغلق مسبقاً ولا يمكن تفعيله" : "Incident already resolved");
+            } else {
+              updateIncidentStatus(centeredAlert.id, 'active');
+            }
+            setCenteredAlert(null); // نقفل التنبيه بعد ما نخلص
+          }} 
           onDismiss={() => setCenteredAlert(null)} 
         />
       )}

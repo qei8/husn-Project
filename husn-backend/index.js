@@ -270,6 +270,51 @@ app.get("/api/incidents", async (req, res) => {
   }
 });
 
+// =========================
+// تحديث حالة البلاغ (Active / Resolved)
+// =========================
+app.patch("/api/incidents/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; // بنستقبل 'active' أو 'resolved'
+
+  try {
+    // 1. نجيب البلاغ من أمازون عشان نشيك على حالته القديمة
+    const getResult = await ddb.send(new GetCommand({
+      TableName: INCIDENTS_TABLE,
+      Key: { incidentId: id }
+    }));
+
+    const incident = getResult.Item;
+    if (!incident) {
+      return res.status(404).json({ error: "البلاغ غير موجود" });
+    }
+
+    // 2. قفل الحماية: إذا كان البلاغ "محلول" وتحاولين ترجعينه "نشط"، نرفض الطلب فوراً
+    if (incident.status?.toLowerCase() === 'resolved' && status.toLowerCase() === 'active') {
+      return res.status(403).json({ error: "لا يمكن إعادة تفعيل بلاغ تم حله مسبقاً" });
+    }
+
+    // 3. إذا عدى الشرط، نحدث الحالة في الداتا بيز
+    await ddb.send(new UpdateCommand({
+      TableName: INCIDENTS_TABLE,
+      Key: { incidentId: id },
+      UpdateExpression: "set #s = :s",
+      ExpressionAttributeNames: { "#s": "status" },
+      ExpressionAttributeValues: { ":s": status }
+    }));
+
+    // 4. نبث التحديث للموقع عشان تتغير الألوان عند كل المستخدمين لايف
+    if (typeof io !== 'undefined') {
+      io.emit("incident-status-updated", { id, status });
+    }
+
+    res.json({ success: true, message: "تم تحديث الحالة بنجاح" });
+  } catch (error) {
+    console.error("❌ خطأ في تحديث حالة البلاغ:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/api/drone/frame", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "file is required" });
@@ -363,6 +408,20 @@ app.post("/api/2fa/verify", (req, res) => {
   } else {
     res.status(400).json({ success: false, message: "الرمز خاطئ ❌" });
   }
+});
+
+// =========================
+// استقبال بيانات الدرون الحية (Telemetry)
+// =========================
+app.post("/api/drone/telemetry", (req, res) => {
+  const telemetryData = req.body;
+  
+  // بث البيانات فوراً للموقع
+  if (typeof io !== 'undefined') {
+    io.emit("telemetry-update", telemetryData);
+  }
+  
+  res.status(200).json({ success: true, message: "Telemetry updated" });
 });
 
 // =========================
