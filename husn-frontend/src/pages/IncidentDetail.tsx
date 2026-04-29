@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,35 +11,72 @@ import {
   ChevronRight,
   AlertTriangle,
   FileText,
-  Flag
+  Flag,
+  Loader2 // أضفنا أيقونة التحميل
 } from 'lucide-react';
-import { mockIncidents, mockAlerts } from '@/data/mockData';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { useLanguage } from '@/contexts/LanguageContext'; // استيراد نظام اللغة
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const IncidentDetail = () => {
   const navigate = useNavigate();
-  const { t, language } = useLanguage(); // استخدام دالة الترجمة
+  const { t, language } = useLanguage();
   const { id } = useParams();
+  
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  // البحث عن الحادث أو التنبيه
-  const incident = mockIncidents.find(i => i.id === id);
-  const alert = mockAlerts.find(a => a.id === id);
-  const data = incident || (alert ? {
-    id: alert.id,
-    alertId: alert.id,
-    status: alert.status,
-    startTime: alert.timestamp,
-    location: alert.location,
-    confidence: alert.confidence / 100,
-    severity: alert.severity === 'critical' ? 5 : alert.severity === 'high' ? 4 : alert.severity === 'medium' ? 3 : 2,
-    description: alert.description || 'Fire detection alert',
-    media: alert.thumbnail ? [alert.thumbnail] : [],
-    createdBy: 'AI',
-  } : null);
+  // 🚀 جلب بيانات الحادث الحقيقية من أمازون
+  useEffect(() => {
+    const fetchIncident = async () => {
+      try {
+        const response = await fetch('https://husn-project.online/api/incidents');
+        const incidents = await response.json();
+        
+        // البحث عن الحادث اللي رقمه يطابق الـ ID اللي في الرابط
+        const foundIncident = incidents.find((i: any) => i.incidentId === id);
 
+        if (foundIncident) {
+          setData({
+            id: foundIncident.incidentId,
+            status: foundIncident.status?.toLowerCase() || 'active',
+            startTime: foundIncident.detectionTime,
+            location: {
+              lat: Number(foundIncident.lat ?? 0),
+              lon: Number(foundIncident.lng ?? 0),
+              name: `إحداثيات: ${Number(foundIncident.lat ?? 0).toFixed(4)}, ${Number(foundIncident.lng ?? 0).toFixed(4)}`
+            },
+            confidence: Number(foundIncident.confidence ?? 0.9),
+            severity: Number(foundIncident.confidence ?? 0) >= 0.95 ? 5 : 4,
+            description: 'تم رصد حريق بواسطة نظام حُصن للذكاء الاصطناعي',
+            // جلب الصورة الحقيقية من S3
+            media: foundIncident.s3Key ? [`https://husn-fire-images.s3.eu-north-1.amazonaws.com/${foundIncident.s3Key}`] : [],
+            createdBy: foundIncident.uavId || 'نظام حُصن (AI)',
+          });
+        }
+      } catch (error) {
+        console.error("❌ فشل جلب تفاصيل الحادث:", error);
+        toast.error(language === 'ar' ? 'حدث خطأ أثناء جلب البيانات' : 'Failed to fetch data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchIncident();
+  }, [id, language]);
+
+  // حالة التحميل (عشان ما يعطينا الحادث غير موجود والسيرفر لسه يقرأ)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+        <p>{language === 'ar' ? 'جاري تحميل التفاصيل...' : 'Loading details...'}</p>
+      </div>
+    );
+  }
+
+  // إذا خلص تحميل وما لقى الحادث
   if (!data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -51,14 +88,17 @@ const IncidentDetail = () => {
     );
   }
 
+  // زر إغلاق البلاغ (تقدرين تربطينه مستقبلاً بـ API لتحديث الحالة في الداتا بيز)
   const handleResolve = () => {
     toast.success(language === 'ar' ? 'تم تحديد الحادث كمحلول' : 'Incident marked as resolved');
+    // تحديث الحالة محلياً في الشاشة
+    setData({...data, status: 'resolved'});
   };
 
   const isRTL = language === 'ar';
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <header className="h-14 border-b border-border bg-card/50 backdrop-blur-sm px-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-4">
@@ -77,7 +117,6 @@ const IncidentDetail = () => {
               'border-warning text-warning'
             }
           >
-            {/* ترجمة الحالة يدوياً إذا لم تكن في القاموس أو استخدام t */}
             {data.status === 'active' ? t('active') : data.status === 'resolved' ? (isRTL ? 'محلول' : 'Resolved') : t('pending')}
           </Badge>
         </div>
@@ -85,7 +124,7 @@ const IncidentDetail = () => {
         <div className="flex items-center gap-2">
           {data.status !== 'resolved' && (
             <Button variant="success" onClick={handleResolve}>
-              <CheckCircle2 className="w-4 h-4 mr-2" />
+              <CheckCircle2 className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               {isRTL ? 'تحديد كمحلول' : 'Mark Resolved'}
             </Button>
           )}
@@ -132,7 +171,7 @@ const IncidentDetail = () => {
                 <div className="relative aspect-video bg-black overflow-hidden rounded-b-lg">
                   <img 
                     src={data.media[currentMediaIndex]} 
-                    alt="Evidence"
+                    alt="Fire Evidence"
                     className="w-full h-full object-contain"
                   />
                   {data.media.length > 1 && (
@@ -178,7 +217,7 @@ const IncidentDetail = () => {
 
                 {/* الوقت */}
                 <div>
-                  <span className="data-label">{isRTL ? 'وقت البدء' : 'Start Time'}</span>
+                  <span className="data-label">{isRTL ? 'وقت الرصد' : 'Detection Time'}</span>
                   <div className="flex items-center gap-2 mt-1">
                     <Clock className="w-4 h-4 text-muted-foreground" />
                     <span className="text-sm">{format(new Date(data.startTime), 'PPpp')}</span>
@@ -217,7 +256,7 @@ const IncidentDetail = () => {
             {/* إجراءات سريعة */}
             <div className="panel p-4 space-y-2">
               <Button variant="ghost" className="w-full text-muted-foreground hover:text-destructive justify-start" onClick={() => toast.info('Flagged')}>
-                <Flag className="w-4 h-4 mr-2" />
+                <Flag className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
                 {t('reportFalsePositive')}
               </Button>
             </div>

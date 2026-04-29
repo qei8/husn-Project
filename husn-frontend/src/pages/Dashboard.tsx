@@ -126,8 +126,7 @@ useEffect(() => {
       } catch (e) { console.error(e); }
     };
     loadIncidents();
-    const interval = setInterval(loadIncidents, 5000);
-    return () => clearInterval(interval);
+   
   }, []);
 
   // جلب الطقس
