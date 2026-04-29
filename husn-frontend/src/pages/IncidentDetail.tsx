@@ -12,11 +12,12 @@ import {
   AlertTriangle,
   FileText,
   Flag,
-  Loader2 // أضفنا أيقونة التحميل
+  Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { io } from 'socket.io-client';
 
 const IncidentDetail = () => {
   const navigate = useNavigate();
@@ -27,14 +28,12 @@ const IncidentDetail = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🚀 جلب بيانات الحادث الحقيقية من أمازون
+  // جلب بيانات الحادث
   useEffect(() => {
     const fetchIncident = async () => {
       try {
         const response = await fetch('https://husn-project.online/api/incidents');
         const incidents = await response.json();
-        
-        // البحث عن الحادث اللي رقمه يطابق الـ ID اللي في الرابط
         const foundIncident = incidents.find((i: any) => i.incidentId === id);
 
         if (foundIncident) {
@@ -50,7 +49,6 @@ const IncidentDetail = () => {
             confidence: Number(foundIncident.confidence ?? 0.9),
             severity: Number(foundIncident.confidence ?? 0) >= 0.95 ? 5 : 4,
             description: 'تم رصد حريق بواسطة نظام حُصن للذكاء الاصطناعي',
-            // جلب الصورة الحقيقية من S3
             media: foundIncident.s3Key ? [`https://husn-fire-images.s3.eu-north-1.amazonaws.com/${foundIncident.s3Key}`] : [],
             createdBy: foundIncident.uavId || 'نظام حُصن (AI)',
           });
@@ -66,7 +64,19 @@ const IncidentDetail = () => {
     fetchIncident();
   }, [id, language]);
 
-  // حالة التحميل (عشان ما يعطينا الحادث غير موجود والسيرفر لسه يقرأ)
+  // 🚀 الاستماع لتحديثات الحالة لايف (لو أحد قفله من برا تتحدث الصفحة هذي)
+  useEffect(() => {
+    const socket = io("https://husn-project.online", { path: "/socket.io" });
+
+    socket.on("incident-status-updated", ({ id: updatedId, status }) => {
+      if (updatedId === id) {
+        setData((prev: any) => prev ? { ...prev, status } : prev);
+      }
+    });
+
+    return () => { socket.disconnect(); };
+  }, [id]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center">
@@ -76,7 +86,6 @@ const IncidentDetail = () => {
     );
   }
 
-  // إذا خلص تحميل وما لقى الحادث
   if (!data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -88,11 +97,28 @@ const IncidentDetail = () => {
     );
   }
 
-  // زر إغلاق البلاغ (تقدرين تربطينه مستقبلاً بـ API لتحديث الحالة في الداتا بيز)
-  const handleResolve = () => {
-    toast.success(language === 'ar' ? 'تم تحديد الحادث كمحلول' : 'Incident marked as resolved');
-    // تحديث الحالة محلياً في الشاشة
-    setData({...data, status: 'resolved'});
+  // 🚀 الدالة الفتاكة: إرسال أمر إغلاق البلاغ للسيرفر
+  const handleResolve = async () => {
+    try {
+      const response = await fetch(`https://husn-project.online/api/incidents/${data.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'resolved' }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        toast.success(language === 'ar' ? 'تم إغلاق البلاغ بنجاح' : 'Incident marked as resolved');
+        // تحديث الشاشة محلياً
+        setData({ ...data, status: 'resolved' });
+      } else {
+        toast.error(result.error || (language === 'ar' ? 'خطأ في التحديث' : 'Update failed'));
+      }
+    } catch (error) {
+      console.error("خطأ في الاتصال:", error);
+      toast.error(language === 'ar' ? 'حدث خطأ في الاتصال' : 'Connection error');
+    }
   };
 
   const isRTL = language === 'ar';
@@ -107,7 +133,7 @@ const IncidentDetail = () => {
           </Button>
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary" />
-            <span className="font-mono font-bold">{data.id}</span>
+            <span className="font-mono font-bold">{data.id.split('-')[1] || data.id}</span>
           </div>
           <Badge 
             variant="outline" 
@@ -122,6 +148,7 @@ const IncidentDetail = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* إذا الحالة مو محلول، يطلع له الزر */}
           {data.status !== 'resolved' && (
             <Button variant="success" onClick={handleResolve}>
               <CheckCircle2 className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
@@ -174,26 +201,6 @@ const IncidentDetail = () => {
                     alt="Fire Evidence"
                     className="w-full h-full object-contain"
                   />
-                  {data.media.length > 1 && (
-                    <>
-                      <Button 
-                        size="icon" 
-                        variant="tactical" 
-                        className="absolute left-2 top-1/2 -translate-y-1/2"
-                        onClick={() => setCurrentMediaIndex(i => i === 0 ? data.media.length - 1 : i - 1)}
-                      >
-                        <ChevronLeft className="w-5 h-5" />
-                      </Button>
-                      <Button 
-                        size="icon" 
-                        variant="tactical" 
-                        className="absolute right-2 top-1/2 -translate-y-1/2"
-                        onClick={() => setCurrentMediaIndex(i => (i + 1) % data.media.length)}
-                      >
-                        <ChevronRight className="w-5 h-5" />
-                      </Button>
-                    </>
-                  )}
                 </div>
               </div>
             )}
@@ -210,9 +217,6 @@ const IncidentDetail = () => {
                 <div>
                   <span className="data-label">{t('map')}</span>
                   <p className="text-sm font-medium mt-1">{data.location.name}</p>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {data.location.lat.toFixed(4)}, {data.location.lon.toFixed(4)}
-                  </p>
                 </div>
 
                 {/* الوقت */}
@@ -244,21 +248,7 @@ const IncidentDetail = () => {
                     </div>
                   </div>
                 </div>
-
-                {/* تم الإبلاغ بواسطة */}
-                <div>
-                  <span className="data-label">{isRTL ? 'تم الإبلاغ بواسطة' : 'Reported By'}</span>
-                  <p className="text-sm mt-1 font-medium text-foreground">{data.createdBy}</p>
-                </div>
               </div>
-            </div>
-
-            {/* إجراءات سريعة */}
-            <div className="panel p-4 space-y-2">
-              <Button variant="ghost" className="w-full text-muted-foreground hover:text-destructive justify-start" onClick={() => toast.info('Flagged')}>
-                <Flag className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
-                {t('reportFalsePositive')}
-              </Button>
             </div>
           </div>
         </div>
