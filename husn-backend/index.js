@@ -28,7 +28,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     
-    origin: ["https://husn-project.vercel.app", "http://localhost:5173"],
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
@@ -37,7 +37,7 @@ const io = new Server(httpServer, {
 // 1. إعدادات الـ CORS
 // ==========================================
 app.use(cors({
-  origin: ["https://husn-project.vercel.app", "http://localhost:5173"], 
+  origin: "*", 
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));

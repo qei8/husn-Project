@@ -2,7 +2,8 @@ import requests
 import time
 # هنا تسوين import لمكتبة الدرون حقتك (مثل DJI SDK)
 
-SERVER_URL = "https://husn-project.online/api/drone/telemetry"
+# في السطر رقم 5، استبدلي الرابط القديم بهذا:
+SERVER_URL = "http://127.0.0.1:8080/api/drone/telemetry"
 
 def send_telemetry():
     while True:
