@@ -249,7 +249,7 @@ const IncidentDetail = () => {
               </div>
             </div>
 
-            {/* 🚀 إضافة زر الإبلاغ عن خطأ (Flag) هنا في الأسفل */}
+            
             <div className="panel p-4 space-y-2">
               <Button 
                 variant="ghost" 

@@ -19,7 +19,7 @@ interface VideoPanelProps {
 }
 
 const STREAM_URL =
-  import.meta.env.VITE_STREAM_URL || 'https://husn-project.online/live/index.m3u8?t=${Date.now()}';
+  import.meta.env.VITE_STREAM_URL || `https://husn-project.online/live/drone.m3u8?t=${Date.now()}`;
 
 const VideoPanel = ({ telemetry }: VideoPanelProps) => {
   const [isRecording, setIsRecording] = useState(false);

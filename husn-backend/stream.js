@@ -3,7 +3,6 @@ import NodeMediaServer from 'node-media-server';
 import { Server } from 'socket.io';
 import path from 'path';
 
-import NodeMediaServer from 'node-media-server';
 
 const config = {
   rtmp: {
