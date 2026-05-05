@@ -4,8 +4,6 @@ import cors from "cors";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcryptjs";
-import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
@@ -25,40 +23,25 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 
 const app = express();
-
-// --- 1. إعدادات الحماية المتقدمة ---
-app.use(helmet()); 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 دقيقة
-  max: 100 // حد أقصى 100 طلب لكل IP
-});
-app.use("/api/auth/", limiter); // تطبيق الحماية على مسارات الدخول فقط
-
-// --- 2. إعدادات الـ CORS (تأكدي من وجود Vercel هنا لاحقاً) ---
-app.use(cors({
-  origin: "*", 
-  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+app.options('*', cors());
 app.use(express.json());
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
+  path: "/socket.io",
   cors: {
-    
-    origin: "*",
+    origin: "https://husn-project.vercel.app",
     methods: ["GET", "POST"]
   }
 });
-
 // ==========================================
 // 1. إعدادات الـ CORS
 // ==========================================
 app.use(cors({
-  origin: "*", 
+  origin: "https://husn-project.vercel.app",
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 app.use('/live', express.static('/home/ubuntu/husn-backend/media/live'));
 app.use(express.json());
