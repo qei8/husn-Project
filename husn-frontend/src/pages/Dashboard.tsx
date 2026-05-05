@@ -96,6 +96,7 @@ const Dashboard = () => {
         timestamp: incident.detectionTime,
         confidence: Number(incident.confidence ?? 0),
         severity: Number(incident.confidence ?? 0) >= 95 ? 'critical' : 'high',
+        // 🚀 التعديل هنا: يخلي البلاغ الجديد ينزل معلق فوراً
         status: incident.status?.toLowerCase() || 'pending',
         location: {
           lat: Number(incident.lat ?? 0),
@@ -251,10 +252,10 @@ const Dashboard = () => {
           alert={centeredAlert} 
           onViewDetails={() => handleViewDetails(centeredAlert)} 
           onConfirm={() => {
-            // 🛑 شرط الحماية: إذا كان البلاغ خلاص انحل، نمنع المستخدم يرجعه أكتف
+            // 🛑 شرط الحماية
             if (centeredAlert.status === 'resolved') {
               toast.error(language === 'ar' ? "هذا البلاغ تم حله مسبقاً ولا يمكن إعادة تفعيله" : "Incident already resolved");
-              return; // نوقف هنا وما نكمل للسيرفر
+              return; 
             }
 
             // ✅ إذا كان لسه جديد أو معلق، نحوله لـ Active في الداتا بيز
