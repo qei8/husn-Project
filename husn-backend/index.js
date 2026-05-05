@@ -22,27 +22,30 @@ import {
   DeleteCommand 
 } from "@aws-sdk/lib-dynamodb";
 
-const app = express();
-app.options('*', cors());
-app.use(express.json());
 
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  path: "/socket.io",
-  cors: {
-    origin: "https://husn-project.vercel.app",
-    methods: ["GET", "POST"]
-  }
-});
+
+
 // ==========================================
 // 1. إعدادات الـ CORS
 // ==========================================
-app.use(cors({
-  origin: "https://husn-project.vercel.app",
-  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
+const app = express();
+
+// أقوى كود لفتح الـ CORS يدوياً (يحل المشكلة غصب)
+app.use((req, res, next) => {
+  // هنا نحدد رابط موقعك بالضبط بدون شرطة مايلة في الأخير
+  res.header('Access-Control-Allow-Origin', 'https://husn-project.vercel.app');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // إذا المتصفح أرسل طلب "جس نبض" (OPTIONS)، نرد عليه فوراً بنجاح عشان يكمل الـ Login
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+
+app.use(express.json());
 app.use('/live', express.static('/home/ubuntu/husn-backend/media/live'));
 app.use(express.json());
 
