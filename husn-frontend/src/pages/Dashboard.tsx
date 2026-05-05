@@ -96,7 +96,7 @@ const Dashboard = () => {
         timestamp: incident.detectionTime,
         confidence: Number(incident.confidence ?? 0),
         severity: Number(incident.confidence ?? 0) >= 95 ? 'critical' : 'high',
-        status: 'active',
+        status: incident.status?.toLowerCase() || 'pending',
         location: {
           lat: Number(incident.lat ?? 0),
           lon: Number(incident.lng ?? 0),

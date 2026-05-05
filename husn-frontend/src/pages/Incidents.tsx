@@ -33,7 +33,7 @@ const Incidents = () => {
         // تنسيق البيانات وترتيبها من الأحدث للأقدم
         const formattedData = data.map((item: any) => ({
           id: item.incidentId,
-          status: item.status?.toLowerCase() || 'active',
+          status: item.status?.toLowerCase() || 'pending',
           location: { 
             name: `إحداثيات: ${Number(item.lat ?? 0).toFixed(4)}, ${Number(item.lng ?? 0).toFixed(4)}` 
           },
@@ -75,7 +75,7 @@ const Incidents = () => {
     socket.on("new-incident", (newIncident: any) => {
       const formattedIncident = {
         id: newIncident.incidentId,
-        status: newIncident.status?.toLowerCase() || 'active',
+        status: newIncident.status?.toLowerCase() || 'pending',
         location: { 
           name: `إحداثيات: ${Number(newIncident.lat ?? 0).toFixed(4)}, ${Number(newIncident.lng ?? 0).toFixed(4)}` 
         },

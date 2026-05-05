@@ -10,7 +10,8 @@ import {
   AlertTriangle,
   FileText,
   Flag,
-  Loader2
+  Loader2,
+  BellRing
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -37,7 +38,7 @@ const IncidentDetail = () => {
         if (foundIncident) {
           setData({
             id: foundIncident.incidentId,
-            status: foundIncident.status?.toLowerCase() || 'active',
+            status: foundIncident.status?.toLowerCase() || 'pending',
             startTime: foundIncident.detectionTime,
             location: {
               lat: Number(foundIncident.lat ?? 0),
@@ -65,9 +66,9 @@ const IncidentDetail = () => {
   // 🚀 الاستماع لتحديثات الحالة لايف (لو أحد قفله من برا تتحدث الصفحة هذي)
   useEffect(() => {
     const socket = io("https://husn-project.online", { 
-    path: "/socket.io",
-    transports: ["websocket"] // 👈 هذا هو السطر السحري اللي يجبره يرسل التنبيه فوراً
-});
+      path: "/socket.io",
+      transports: ["websocket"] // 👈 السطر السحري
+    });
 
     socket.on("incident-status-updated", ({ id: updatedId, status }) => {
       if (updatedId === id) {
@@ -98,21 +99,24 @@ const IncidentDetail = () => {
     );
   }
 
-  // 🚀 الدالة الفتاكة: إرسال أمر إغلاق البلاغ للسيرفر
-  const handleResolve = async () => {
+  // 🚀 دالة تحديث الحالة (تستخدم للتأكيد وللإغلاق)
+  const handleUpdateStatus = async (newStatus: string) => {
     try {
       const response = await fetch(`https://husn-project.online/api/incidents/${data.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'resolved' }),
+        body: JSON.stringify({ status: newStatus }),
       });
 
       const result = await response.json();
 
       if (response.ok) {
-        toast.success(language === 'ar' ? 'تم إغلاق البلاغ بنجاح' : 'Incident marked as resolved');
-        // تحديث الشاشة محلياً
-        setData({ ...data, status: 'resolved' });
+        toast.success(
+          language === 'ar' 
+            ? (newStatus === 'active' ? 'تم تأكيد البلاغ بنجاح وتفعيله' : 'تم إغلاق البلاغ بنجاح') 
+            : (newStatus === 'active' ? 'Incident confirmed as active' : 'Incident marked as resolved')
+        );
+        setData({ ...data, status: newStatus });
       } else {
         toast.error(result.error || (language === 'ar' ? 'خطأ في التحديث' : 'Update failed'));
       }
@@ -139,9 +143,9 @@ const IncidentDetail = () => {
           <Badge 
             variant="outline" 
             className={
-              data.status === 'active' ? 'border-destructive text-destructive' :
-              data.status === 'resolved' ? 'border-success text-success' :
-              'border-warning text-warning'
+              data.status === 'active' ? 'border-destructive text-destructive bg-destructive/10' :
+              data.status === 'resolved' ? 'border-success text-success bg-success/10' :
+              'border-warning text-warning bg-warning/10'
             }
           >
             {data.status === 'active' ? t('active') : data.status === 'resolved' ? (isRTL ? 'محلول' : 'Resolved') : t('pending')}
@@ -149,9 +153,20 @@ const IncidentDetail = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* إذا الحالة مو محلول، يطلع له الزر */}
-          {data.status !== 'resolved' && (
-            <Button variant="success" onClick={handleResolve}>
+          {/* 🚀 الزر يتغير بناءً على الحالة (وهنا التعديل اللي سويته لك عشان يضبط التصميم) */}
+          {data.status === 'pending' && (
+            <Button 
+              variant="outline" 
+              className="border-warning text-warning hover:bg-warning hover:text-warning-foreground"
+              onClick={() => handleUpdateStatus('active')}
+            >
+              <BellRing className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+              {isRTL ? 'تأكيد البلاغ وتفعيله' : 'Confirm & Activate'}
+            </Button>
+          )}
+
+          {data.status === 'active' && (
+            <Button variant="success" onClick={() => handleUpdateStatus('resolved')}>
               <CheckCircle2 className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               {isRTL ? 'تحديد كمحلول' : 'Mark Resolved'}
             </Button>
@@ -175,8 +190,8 @@ const IncidentDetail = () => {
               <div className="flex-1 h-[calc(100%-48px)] bg-muted/30 relative tactical-grid overflow-hidden rounded-b-lg">
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-destructive/20 border-2 border-destructive flex items-center justify-center animate-pulse">
-                      <AlertTriangle className="w-8 h-8 text-destructive" />
+                    <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center animate-pulse border-2 ${data.status === 'active' ? 'bg-destructive/20 border-destructive' : 'bg-warning/20 border-warning'}`}>
+                      <AlertTriangle className={`w-8 h-8 ${data.status === 'active' ? 'text-destructive' : 'text-warning'}`} />
                     </div>
                     <p className="font-medium text-foreground">{data.location.name}</p>
                     <p className="text-xs text-muted-foreground font-mono">
