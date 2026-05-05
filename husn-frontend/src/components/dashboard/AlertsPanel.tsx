@@ -7,11 +7,13 @@ import {
   Eye,
   Clock,
   MapPin,
+  BellRing
 } from 'lucide-react';
 import { Alert } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale'; // استيراد اللغات
 import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from 'sonner';
 
 interface AlertsPanelProps {
   alerts: Alert[];
@@ -49,6 +51,31 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
     }
   };
 
+  // 🚀 دالة تحديث الحالة وإرسالها للسيرفر
+  const handleUpdateStatus = async (e: React.MouseEvent, alertId: string, newStatus: string) => {
+    e.stopPropagation(); // عشان ما يفتح تفاصيل البلاغ لما تضغطين الزر
+    try {
+      const response = await fetch(`https://husn-project.online/api/incidents/${alertId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        toast.success(
+          isRTL 
+            ? (newStatus === 'active' ? 'تم تأكيد البلاغ وتفعيله' : 'تم إغلاق البلاغ بنجاح') 
+            : (newStatus === 'active' ? 'Alert Confirmed & Activated' : 'Alert Marked Resolved')
+        );
+      } else {
+        toast.error(isRTL ? 'خطأ في التحديث' : 'Update failed');
+      }
+    } catch (error) {
+      console.error("Connection error:", error);
+      toast.error(isRTL ? 'حدث خطأ في الاتصال' : 'Connection error');
+    }
+  };
+
   return (
     <div className="panel h-full flex flex-col" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="panel-header">
@@ -80,10 +107,9 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
                   <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 shrink-0 rounded-full ${
                       alert.status === 'active' ? 'bg-destructive animate-pulse' : 
-                      alert.status === 'pending' ? 'bg-warning' : 'bg-muted-foreground'
+                      alert.status === 'pending' ? 'bg-warning' : 'bg-success'
                     }`} />
                     <span className="font-medium text-[10px] font-mono opacity-70">
-                      {/* ناخذ الجزء الأول من الـ UUID عشان يكون مميز */}
                       {alert.id.split('-')[1]?.substring(0, 6) || alert.id}...
                     </span>
                   </div>
@@ -107,7 +133,7 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
                     <Clock className="w-3 h-3 shrink-0" />
                     <span>{formatDistanceToNow(new Date(alert.timestamp), { 
                       addSuffix: true,
-                      locale: isRTL ? ar : enUS // دعم اللغة العربية للوقت
+                      locale: isRTL ? ar : enUS
                     })}</span>
                   </div>
                 </div>
@@ -119,20 +145,40 @@ const AlertsPanel = ({ alerts, onViewDetails, onConfirm, onDismiss }: AlertsPane
                       size="sm" 
                       variant="tactical" 
                       className="flex-1 h-7 text-[10px]"
-                      onClick={() => onViewDetails(alert)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onViewDetails(alert);
+                      }}
                     >
                       <Eye className={`w-3 h-3 ${isRTL ? 'ml-1' : 'mr-1'}`} />
                       {t('view')}
                     </Button>
-                    <Button 
-                      size="sm" 
-                      variant="success" 
-                      className="flex-1 h-7 text-[10px]"
-                      onClick={() => onConfirm(alert.id)}
-                    >
-                      <CheckCircle2 className={`w-3 h-3 ${isRTL ? 'ml-1' : 'mr-1'}`} />
-                      {t('confirmAlert')}
-                    </Button>
+                    
+                    {/* 🚀 زر التأكيد والتفعيل للبلاغ المعلق */}
+                    {alert.status === 'pending' && (
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1 h-7 text-[10px] border-warning text-warning hover:bg-warning hover:text-warning-foreground"
+                        onClick={(e) => handleUpdateStatus(e, alert.id, 'active')}
+                      >
+                        <BellRing className={`w-3 h-3 ${isRTL ? 'ml-1' : 'mr-1'}`} />
+                        {isRTL ? 'تأكيد وتفعيل' : 'Confirm & Activate'}
+                      </Button>
+                    )}
+
+                    {/* 🚀 زر الإغلاق للبلاغ النشط */}
+                    {alert.status === 'active' && (
+                      <Button 
+                        size="sm" 
+                        variant="success" 
+                        className="flex-1 h-7 text-[10px]"
+                        onClick={(e) => handleUpdateStatus(e, alert.id, 'resolved')}
+                      >
+                        <CheckCircle2 className={`w-3 h-3 ${isRTL ? 'ml-1' : 'mr-1'}`} />
+                        {isRTL ? 'تحديد كمحلول' : 'Mark Resolved'}
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
