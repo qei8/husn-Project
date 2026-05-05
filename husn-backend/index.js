@@ -30,15 +30,12 @@ import {
 // ==========================================
 const app = express();
 
-// أقوى كود لفتح الـ CORS يدوياً (يحل المشكلة غصب)
 app.use((req, res, next) => {
-  // هنا نحدد رابط موقعك بالضبط بدون شرطة مايلة في الأخير
   res.header('Access-Control-Allow-Origin', 'https://husn-project.vercel.app');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   
-  // إذا المتصفح أرسل طلب "جس نبض" (OPTIONS)، نرد عليه فوراً بنجاح عشان يكمل الـ Login
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -47,9 +44,23 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use('/live', express.static('/home/ubuntu/husn-backend/media/live'));
-app.use(express.json());
+
+// ==========================================
+// 2. إعداد السيرفر والسوكيت (هذا اللي كان ناقص)
+// ==========================================
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  path: "/socket.io",
+  cors: {
+    origin: "https://husn-project.vercel.app",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+
 
 // إعدادات AWS من ملف .env
 const s3 = new S3Client({ region: process.env.AWS_REGION });
