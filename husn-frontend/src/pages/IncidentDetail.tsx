@@ -64,7 +64,10 @@ const IncidentDetail = () => {
 
   // 🚀 الاستماع لتحديثات الحالة لايف (لو أحد قفله من برا تتحدث الصفحة هذي)
   useEffect(() => {
-    const socket = io("https://husn-project.online", { path: "/socket.io" });
+    const socket = io("https://husn-project.online", { 
+    path: "/socket.io",
+    transports: ["websocket"] 
+   });
 
     socket.on("incident-status-updated", ({ id: updatedId, status }) => {
       if (updatedId === id) {

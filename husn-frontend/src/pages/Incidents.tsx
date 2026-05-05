@@ -57,7 +57,10 @@ const Incidents = () => {
 
   // 🚀 الاستماع للتحديثات المباشرة (Socket.io)
   useEffect(() => {
-    const socket = io("https://husn-project.online", { path: "/socket.io" });
+    const socket = io("https://husn-project.online", { 
+    path: "/socket.io",
+    transports: ["websocket"] 
+    });
 
     // 1. تحديث حالة بلاغ موجود (Active/Resolved)
     socket.on("incident-status-updated", ({ id, status }) => {

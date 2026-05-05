@@ -61,7 +61,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     const socket = io("https://husn-project.online", {
-      path: "/socket.io"
+      path: "/socket.io" ,
+      transports: ["websocket"]
     });
 
     socket.on("connect", () => {
