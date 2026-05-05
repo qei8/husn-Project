@@ -357,7 +357,7 @@ app.post("/api/drone/frame", upload.single("file"), async (req, res) => {
       pk: "INCIDENT",
       detectionTime: new Date().toISOString(),
       s3Key: key,
-      status: "Active",
+      status: "pending",
       confidence: 0.9, // الموديل لقطها خلاص
       lat, lng, uavId,
       label: "fire"

@@ -66,8 +66,8 @@ const IncidentDetail = () => {
   useEffect(() => {
     const socket = io("https://husn-project.online", { 
     path: "/socket.io",
-    transports: ["websocket"] 
-   });
+    transports: ["websocket"] // 👈 هذا هو السطر السحري اللي يجبره يرسل التنبيه فوراً
+});
 
     socket.on("incident-status-updated", ({ id: updatedId, status }) => {
       if (updatedId === id) {
