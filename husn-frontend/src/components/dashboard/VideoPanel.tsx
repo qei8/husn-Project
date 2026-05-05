@@ -113,15 +113,33 @@ const VideoPanel = ({ telemetry }: VideoPanelProps) => {
         )}
 
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background/90 to-transparent p-4">
+
           <div className="grid grid-cols-4 md:grid-cols-7 gap-3">
+
             <TelemetryItem icon={Battery} label={t('battery')} value={`${Math.round(telemetry.battery)}%`} warning={telemetry.battery < 30} />
+
             <TelemetryItem icon={Signal} label={t('signal')} value={`${Math.round(telemetry.signal)}%`} warning={telemetry.signal < 50} />
+
+            <TelemetryItem icon={Thermometer} label={t('temp')} value={`${Math.round(telemetry.temperature)}°C`} />
+
+            <TelemetryItem icon={Wind} label={t('wind')} value={`${Math.round(telemetry.windSpeed)} km/h`} />
+
+            <TelemetryItem icon={Droplets} label={t('humidity')} value={`${Math.round(telemetry.humidity)}%`} />
+
+            <TelemetryItem icon={Gauge} label={t('alt')} value={`${Math.round(telemetry.altitude)}m`} />
+
             <TelemetryItem icon={Navigation} label={t('speed')} value={`${Math.round(telemetry.speed)} km/h`} />
+
           </div>
+
         </div>
+
       </div>
+
     </div>
+
   );
+
 };
 
 interface TelemetryItemProps {
