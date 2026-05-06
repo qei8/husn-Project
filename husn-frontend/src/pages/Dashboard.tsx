@@ -92,20 +92,21 @@ const Dashboard = () => {
     socket.on("new-incident", (incident: any) => {
       console.log("🔥 HUSN Alert Received:", incident);
       
-      const newAlert: Alert = {
-        id: incident.incidentId,
-        timestamp: incident.detectionTime,
-        confidence: Number(incident.confidence ?? 0),
-        severity: Number(incident.confidence ?? 0) >= 95 ? 'critical' : 'high',
-        // 🚀 التعديل هنا: يخلي البلاغ الجديد ينزل معلق فوراً
-        status: incident.status?.toLowerCase() || 'pending',
-        location: {
-          lat: Number(incident.lat ?? 0),
-          lon: Number(incident.lng ?? 0),
-          name: `Lat ${incident.lat}, Lon ${incident.lng}`
-        },
-        thumbnail: incident.s3Key ? `https://husn-fire-images.s3.eu-north-1.amazonaws.com/${incident.s3Key}` : undefined,
-      };
+const newAlert: Alert = {
+  id: incident.incidentId,
+  severity: Number(incident.confidence ?? 0) >= 95 ? 'critical' : 'high',
+  location: {
+    lat: Number(incident.lat),
+    lon: Number(incident.lng),
+    name: `Lat ${incident.lat}, Lon ${incident.lng}`
+  },
+  timestamp: incident.detectionTime,
+  status: incident.status ?? 'active',
+  confidence: Number(incident.confidence ?? 0),
+  thumbnail: incident.s3Key
+    ? `https://husn-fire-images.s3.eu-north-1.amazonaws.com/${incident.s3Key}`
+    : null
+};
 
       setAlerts(prev => [newAlert, ...prev]);
       setCenteredAlert(newAlert);
