@@ -351,17 +351,32 @@ app.post("/api/drone/frame", upload.single("file"), async (req, res) => {
     }));
 
     // 3. تجهيز بيانات البلاغ
-    const incidentId = `INC-${uuidv4()}`;
-    const item = {
-      incidentId,
-      pk: "INCIDENT",
-      detectionTime: new Date().toISOString(),
-      s3Key: key,
-      status: "pending",
-      confidence: 0.9, // الموديل لقطها خلاص
-      lat, lng, uavId,
-      label: "fire"
-    };
+   // 3. استلام نتيجة الموديل (من detector.py)
+const { alert, confidence } = req.body;
+
+// إذا ما فيه كشف → لا نسوي بلاغ
+if (!alert) {
+  return res.status(200).json({
+    detected: false,
+    message: "No fire detected"
+  });
+}
+
+// 4. تجهيز بيانات البلاغ
+const incidentId = `INC-${uuidv4()}`;
+const item = {
+  incidentId,
+  pk: "INCIDENT",
+  detectionTime: new Date().toISOString(),
+  s3Key: key,
+  status: "pending",
+  confidence: confidence || 0.9,
+  lat,
+  lng,
+  uavId,
+  label: alert // fire أو smoke من الموديل
+};
+
 
     // 4. حفظ في DynamoDB
     await ddb.send(new PutCommand({ TableName: INCIDENTS_TABLE, Item: item }));
@@ -376,6 +391,47 @@ app.post("/api/drone/frame", upload.single("file"), async (req, res) => {
     res.status(201).json({ detected: true, incident: item });
   } catch (error) {
     console.error("❌ Error in /api/drone/frame:", error);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+app.post("/api/ai/alert", async (req, res) => {
+  try {
+    const { alert, confidence, lat, lng, uavId } = req.body;
+
+    if (!alert) {
+      return res.status(200).json({ detected: false });
+    }
+
+    const incidentId = `INC-${uuidv4()}`;
+
+    const item = {
+      incidentId,
+      pk: "INCIDENT",
+      detectionTime: new Date().toISOString(),
+      status: "pending",
+      confidence: confidence || 0.9,
+      lat: lat || 24.7136,
+      lng: lng || 46.6753,
+      uavId: uavId || "UAV-01",
+      label: alert
+    };
+
+    await ddb.send(new PutCommand({
+      TableName: INCIDENTS_TABLE,
+      Item: item
+    }));
+
+    io.emit("new-incident", item);
+
+    console.log("🔥 AI Alert sent:", item);
+
+    res.status(201).json({
+      detected: true,
+      incident: item
+    });
+
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Internal error" });
   }
 });
