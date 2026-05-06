@@ -37,6 +37,7 @@ const initialTelemetry: UAVTelemetry = {
   timestamp: new Date().toISOString(),
 };
 
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { t, language } = useLanguage();

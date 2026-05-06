@@ -1,24 +1,33 @@
 import 'dotenv/config';
 import express from "express";
+import cors from "cors";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcryptjs";
+
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
+import path from 'path';
 import { createServer } from "http";
 import { Server } from "socket.io";
 
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import {
-  DynamoDBDocumentClient,
-  PutCommand,
-  GetCommand,
-  ScanCommand,
-  UpdateCommand,
-  DeleteCommand
+import { 
+  DynamoDBDocumentClient, 
+  PutCommand, 
+  GetCommand, 
+  ScanCommand, 
+  UpdateCommand, 
+  DeleteCommand 
 } from "@aws-sdk/lib-dynamodb";
 
+
+
+
+// ==========================================
+// 1. إعدادات الـ CORS
+// ==========================================
 const app = express();
 
 app.use((req, res, next) => {
@@ -26,7 +35,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-
+  
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -36,8 +45,10 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use('/live', express.static('/home/ubuntu/husn-backend/media/live'));
 
+// ==========================================
+// 2. إعداد السيرفر والسوكيت (هذا اللي كان ناقص)
+// ==========================================
 const httpServer = createServer(app);
-
 const io = new Server(httpServer, {
   path: "/socket.io",
   cors: {
@@ -47,10 +58,13 @@ const io = new Server(httpServer, {
   }
 });
 
+
 const upload = multer({ storage: multer.memoryStorage() });
 
-const s3 = new S3Client({ region: process.env.AWS_REGION });
 
+
+// إعدادات AWS من ملف .env
+const s3 = new S3Client({ region: process.env.AWS_REGION });
 const ddb = DynamoDBDocumentClient.from(
   new DynamoDBClient({ region: process.env.AWS_REGION })
 );
@@ -58,14 +72,19 @@ const ddb = DynamoDBDocumentClient.from(
 const BUCKET = process.env.S3_BUCKET_NAME;
 const INCIDENTS_TABLE = process.env.DDB_INCIDENTS_TABLE;
 const USERS_TABLE = process.env.DDB_USERS_TABLE;
+const MODEL_API_URL = process.env.MODEL_API_URL;
+
 
 console.log("🚀 BOOTING HUSN SYSTEM...", {
   REGION: process.env.AWS_REGION,
-  BUCKET,
+  BUCKET: BUCKET,
   TABLE_INCIDENTS: INCIDENTS_TABLE,
   TABLE_USERS: USERS_TABLE
 });
 
+// =========================
+// 2. مسارات اختبار السيرفر (Health Checks)
+// =========================
 app.get("/", (req, res) => {
   res.send("🚀 HUSN System API is Running and Secure!");
 });
@@ -73,13 +92,38 @@ app.get("/", (req, res) => {
 app.get("/health", (req, res) => {
   res.json({ status: "UP", message: "Server is reachable" });
 });
+app.get("/api/health", (req, res) => {
+  res.json({ status: "UP", message: "Server is reachable" });
+});
 
 // =========================
-// AUTH
+// 3. مساعدات (Helpers)
+// =========================
+async function analyzeImageWithModel(fileBuffer, fileName, contentType) {
+  if (!MODEL_API_URL) {
+    return { detected: false, message: "Model URL not configured" };
+  }
+  try {
+    const formData = new FormData();
+    const blob = new Blob([fileBuffer], { type: contentType });
+    formData.append("file", blob, fileName);
+
+    const response = await fetch(`${MODEL_API_URL}/predict`, {
+      method: "POST",
+      body: formData,
+    });
+    return response.json();
+  } catch (error) {
+    console.error("Model Analysis Error:", error);
+    return { detected: false, error: "Failed to connect to AI Model" };
+  }
+}
+
+// // =========================
+// 4. نظام تسجيل الدخول (AUTH)
 // =========================
 app.post("/api/auth/login", async (req, res) => {
   const { userId, password } = req.body;
-
   try {
     const result = await ddb.send(new GetCommand({
       TableName: USERS_TABLE,
@@ -87,40 +131,45 @@ app.post("/api/auth/login", async (req, res) => {
     }));
 
     const user = result.Item;
-
     if (!user) return res.status(404).json({ error: "الموظف غير موجود" });
     if (user.status === "Inactive") return res.status(403).json({ error: "حسابك معطل" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: "كلمة المرور خاطئة" });
 
+    // --- منطق الـ 2FA الإلزامي ---
     let currentSecret = user.twoFactorSecret;
     let currentQrCode = null;
 
     if (!currentSecret) {
+      // موظف قديم أو جديد ما عنده سكرت، نولد له واحد "حالا"
       const secretObj = speakeasy.generateSecret({ name: `HUSN:${user.userId}` });
       currentSecret = secretObj.base32;
-
+      
+      // تحديث DynamoDB فوراً
       await ddb.send(new UpdateCommand({
         TableName: USERS_TABLE,
         Key: { userId: user.userId },
         UpdateExpression: "set twoFactorSecret = :s, is2FAEnabled = :e",
-        ExpressionAttributeValues: {
-          ":s": currentSecret,
-          ":e": true
+        ExpressionAttributeValues: { 
+          ":s": currentSecret, 
+          ":e": true 
         }
       }));
-
+      
+      // توليد الباركود
       currentQrCode = await QRCode.toDataURL(secretObj.otpauth_url);
+      console.log(`✅ 2FA Auto-Enabled for: ${user.userId}`);
     }
 
+    // الرد النهائي بمسميات مطابقة لما يتوقعه الـ React
     res.json({
       userId: user.userId,
       name: user.name,
       role: user.role,
       isFirstLogin: user.isFirstLogin,
       twoFactorEnabled: true,
-      twoFactorSecret: currentSecret,
+      twoFactorSecret: currentSecret, // لازم الاسم هنا يطابق المتغير اللي فوقه
       qrCode: currentQrCode
     });
 
@@ -132,7 +181,6 @@ app.post("/api/auth/login", async (req, res) => {
 
 app.post("/api/auth/change-password", async (req, res) => {
   const { userId, currentPassword, newPassword } = req.body;
-
   try {
     const result = await ddb.send(new GetCommand({
       TableName: USERS_TABLE,
@@ -144,32 +192,26 @@ app.post("/api/auth/change-password", async (req, res) => {
 
     if (!user.isFirstLogin) {
       if (!currentPassword) return res.status(400).json({ error: "يجب إدخال كلمة المرور الحالية" });
-
       const isMatch = await bcrypt.compare(currentPassword, user.password);
       if (!isMatch) return res.status(401).json({ error: "كلمة المرور الحالية غير صحيحة" });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-
     await ddb.send(new UpdateCommand({
       TableName: USERS_TABLE,
       Key: { userId },
       UpdateExpression: "set password = :p, isFirstLogin = :f",
-      ExpressionAttributeValues: {
-        ":p": hashedPassword,
-        ":f": false
-      }
+      ExpressionAttributeValues: { ":p": hashedPassword, ":f": false }
     }));
 
     res.json({ message: "تم تحديث كلمة المرور بنجاح" });
-
   } catch (e) {
     res.status(500).json({ error: "فشل تحديث كلمة المرور" });
   }
 });
 
 // =========================
-// USERS
+// 5. إدارة المستخدمين (USERS)
 // =========================
 app.get("/api/users", async (req, res) => {
   try {
@@ -182,39 +224,27 @@ app.get("/api/users", async (req, res) => {
 
 app.post("/api/users", async (req, res) => {
   const { userId, name, role = "employee" } = req.body;
-
   try {
     const tempPass = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPassword = await bcrypt.hash(tempPass, 10);
 
     const newUser = {
-      userId,
-      name,
-      role,
+      userId, name, role,
       password: hashedPassword,
       status: "Active",
       isFirstLogin: true,
       createdAt: new Date().toISOString()
     };
 
-    await ddb.send(new PutCommand({
-      TableName: USERS_TABLE,
-      Item: newUser
-    }));
-
-    res.status(201).json({
-      message: "تمت إضافة الموظف",
-      tempPass
-    });
-
+    await ddb.send(new PutCommand({ TableName: USERS_TABLE, Item: newUser }));
+    res.status(201).json({ message: "تمت إضافة الموظف", tempPass });
   } catch (e) {
     res.status(500).json({ error: "فشل إنشاء الحساب" });
   }
 });
 
 app.patch("/api/users/:id/status", async (req, res) => {
-  const { status } = req.body;
-
+  const { status } = req.body; 
   try {
     await ddb.send(new UpdateCommand({
       TableName: USERS_TABLE,
@@ -223,25 +253,25 @@ app.patch("/api/users/:id/status", async (req, res) => {
       ExpressionAttributeNames: { "#s": "status" },
       ExpressionAttributeValues: { ":s": status }
     }));
-
     res.json({ message: "تم تحديث الحالة" });
-
   } catch (e) {
     res.status(500).json({ error: "فشل تحديث الحالة" });
   }
 });
 
+
 app.delete('/api/users/:userId', async (req, res) => {
-  const { userId } = req.params;
+  const { userId } = req.params; 
+  
+  // سوي console.log هنا عشان تشوفي في الـ Logs حقت Vercel إذا الطلب وصل
+  console.log("جاري حذف المستخدم:", userId);
 
   try {
     await ddb.send(new DeleteCommand({
       TableName: USERS_TABLE,
-      Key: { userId }
+      Key: { userId: userId } 
     }));
-
     res.status(200).json({ message: "تم الحذف بنجاح" });
-
   } catch (error) {
     console.error("خطأ في DynamoDB:", error);
     res.status(500).json({ error: error.message });
@@ -249,7 +279,7 @@ app.delete('/api/users/:userId', async (req, res) => {
 });
 
 // =========================
-// INCIDENTS
+// 6. الحوادث (INCIDENTS)
 // =========================
 app.get("/api/incidents", async (req, res) => {
   try {
@@ -260,26 +290,31 @@ app.get("/api/incidents", async (req, res) => {
   }
 });
 
+// =========================
+// تحديث حالة البلاغ (Active / Resolved)
+// =========================
 app.patch("/api/incidents/:id/status", async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status } = req.body; // بنستقبل 'active' أو 'resolved'
 
   try {
+    // 1. نجيب البلاغ من أمازون عشان نشيك على حالته القديمة
     const getResult = await ddb.send(new GetCommand({
       TableName: INCIDENTS_TABLE,
       Key: { incidentId: id }
     }));
 
     const incident = getResult.Item;
-
     if (!incident) {
       return res.status(404).json({ error: "البلاغ غير موجود" });
     }
 
+    // 2. قفل الحماية: إذا كان البلاغ "محلول" وتحاولين ترجعينه "نشط"، نرفض الطلب فوراً
     if (incident.status?.toLowerCase() === 'resolved' && status.toLowerCase() === 'active') {
       return res.status(403).json({ error: "لا يمكن إعادة تفعيل بلاغ تم حله مسبقاً" });
     }
 
+    // 3. إذا عدى الشرط، نحدث الحالة في الداتا بيز
     await ddb.send(new UpdateCommand({
       TableName: INCIDENTS_TABLE,
       Key: { incidentId: id },
@@ -288,34 +323,29 @@ app.patch("/api/incidents/:id/status", async (req, res) => {
       ExpressionAttributeValues: { ":s": status }
     }));
 
-    io.emit("incident-status-updated", { id, status });
+    // 4. نبث التحديث للموقع عشان تتغير الألوان عند كل المستخدمين لايف
+    if (typeof io !== 'undefined') {
+      io.emit("incident-status-updated", { id, status });
+    }
 
-    res.json({
-      success: true,
-      message: "تم تحديث الحالة بنجاح"
-    });
-
+    res.json({ success: true, message: "تم تحديث الحالة بنجاح" });
   } catch (error) {
     console.error("❌ خطأ في تحديث حالة البلاغ:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// =========================
-// DRONE FRAME: يرفع الصورة فقط
-// =========================
 app.post("/api/drone/frame", upload.single("file"), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "file is required" });
-    }
+    if (!req.file) return res.status(400).json({ error: "file is required" });
 
+    // 1. استلام البيانات من الموديل (detector.py)
     const lat = req.body.lat ? Number(req.body.lat) : 21.5;
     const lng = req.body.lng ? Number(req.body.lng) : 39.2;
     const uavId = req.body.uavId || "UAV-01";
 
+    // 2. رفع الصورة لـ S3 (عشان تظهر في الموقع للأبد)
     const key = `uploads/${Date.now()}-${req.file.originalname}`;
-
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
@@ -323,33 +353,40 @@ app.post("/api/drone/frame", upload.single("file"), async (req, res) => {
       Body: req.file.buffer,
     }));
 
-    res.status(201).json({
-      success: true,
-      message: "Drone frame uploaded successfully",
-      s3Key: key,
-      lat,
-      lng,
-      uavId
-    });
+    // 3. تجهيز بيانات البلاغ
 
+// 4. تجهيز بيانات البلاغ
+const incidentId = `INC-${uuidv4()}`;
+const item = {
+  incidentId,
+  pk: "INCIDENT",
+  detectionTime: new Date().toISOString(),
+  s3Key: key,
+  status: "pending",
+  confidence: Number(req.body.confidence || 0.9),
+  lat,
+  lng,
+  uavId,
+  label: req.body.alert || "fire"
+};
+
+
+    // 4. حفظ في DynamoDB
+    await ddb.send(new PutCommand({ TableName: INCIDENTS_TABLE, Item: item }));
+
+  
+    res.status(201).json({ detected: true, incident: item });
   } catch (error) {
     console.error("❌ Error in /api/drone/frame:", error);
     res.status(500).json({ error: "Internal error" });
   }
 });
-
-// =========================
-// AI ALERT: هذا هو اللي يطلع الأليرت الحقيقي
-// =========================
 app.post("/api/ai/alert", async (req, res) => {
   try {
     const { alert, confidence, lat, lng, uavId } = req.body;
 
     if (!alert) {
-      return res.status(200).json({
-        detected: false,
-        message: "No fire or smoke detected"
-      });
+      return res.status(200).json({ detected: false });
     }
 
     const incidentId = `INC-${uuidv4()}`;
@@ -360,8 +397,8 @@ app.post("/api/ai/alert", async (req, res) => {
       detectionTime: new Date().toISOString(),
       status: "pending",
       confidence: confidence || 0.9,
-      lat: lat || 21.5,
-      lng: lng || 39.2,
+      lat: lat || 24.7136,
+      lng: lng || 46.6753,
       uavId: uavId || "UAV-01",
       label: alert
     };
@@ -381,40 +418,36 @@ app.post("/api/ai/alert", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Error in /api/ai/alert:", error);
+    console.error(error);
     res.status(500).json({ error: "Internal error" });
   }
 });
 
-// =========================
-// 2FA
-// =========================
+//Google Authenticator
 app.post("/api/2fa/setup", async (req, res) => {
-  const { userId } = req.body;
-
+  const { userId } = req.body; // نستخدم رقم الموظف اللي دخل به
+  
+  // 1. توليد مفتاح سري جديد
   const secret = speakeasy.generateSecret({
     name: `HUSN-System:${userId}`
   });
 
   try {
+    // 2. حفظ المفتاح في DynamoDB للموظف هذا بالذات
     await ddb.send(new UpdateCommand({
       TableName: USERS_TABLE,
       Key: { userId },
       UpdateExpression: "set twoFactorSecret = :s, is2FAEnabled = :e",
-      ExpressionAttributeValues: {
-        ":s": secret.base32,
-        ":e": true
+      ExpressionAttributeValues: { 
+        ":s": secret.base32, 
+        ":e": true 
       }
     }));
 
+    // 3. تحويل الرابط لباركود وإرساله للفرونت إند
     QRCode.toDataURL(secret.otpauth_url, (err, data_url) => {
-      if (err) {
-        return res.status(500).json({ error: "فشل إنشاء QR Code" });
-      }
-
       res.json({ qrCode: data_url });
     });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "فشل إعداد التحقق" });
@@ -425,9 +458,9 @@ app.post("/api/2fa/verify", (req, res) => {
   const { userToken, userSecret } = req.body;
 
   const verified = speakeasy.totp.verify({
-    secret: userSecret,
+    secret: userSecret, // السر اللي جبناه من الداتا بيز للمستخدم
     encoding: 'base32',
-    token: userToken
+    token: userToken // الـ 6 أرقام اللي دخلها من جواله
   });
 
   if (verified) {
@@ -438,24 +471,23 @@ app.post("/api/2fa/verify", (req, res) => {
 });
 
 // =========================
-// TELEMETRY
+// استقبال بيانات الدرون الحية (Telemetry)
 // =========================
 app.post("/api/drone/telemetry", (req, res) => {
   const telemetryData = req.body;
-
-  io.emit("telemetry-update", telemetryData);
-
-  res.status(200).json({
-    success: true,
-    message: "Telemetry updated"
-  });
+  
+  // بث البيانات فوراً للموقع
+  if (typeof io !== 'undefined') {
+    io.emit("telemetry-update", telemetryData);
+  }
+  
+  res.status(200).json({ success: true, message: "Telemetry updated" });
 });
 
 // =========================
-// START SERVER
+// 7. تشغيل السيرفر
 // =========================
 const port = process.env.PORT || 8080;
-
 httpServer.listen(port, "0.0.0.0", () => {
   console.log(`
   ==========================================
