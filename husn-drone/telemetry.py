@@ -30,7 +30,7 @@ def send_telemetry():
                 payload = {
                     "id": "HUSN-UAV-01",
                     "battery": battery,
-                    "lat": 18.2465,  # موقع أبها ثابت
+                    "lat": 18.2465,  
                     "lon": 42.5117,
                     "altitude": height,
                     "speed": speed,
