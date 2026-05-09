@@ -137,31 +137,42 @@ app.post("/api/auth/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: "كلمة المرور خاطئة" });
 
-    // --- منطق الـ 2FA الإلزامي ---
-    let currentSecret = user.twoFactorSecret;
-    let currentQrCode = null;
+// --- منطق الـ 2FA ---
+let currentSecret = user.twoFactorSecret;
+let currentQrCode = null;
 
-    if (!currentSecret) {
-      // موظف قديم أو جديد ما عنده سكرت، نولد له واحد "حالا"
-      const secretObj = speakeasy.generateSecret({ name: `HUSN:${user.userId}` });
-      currentSecret = secretObj.base32;
-      
-      // تحديث DynamoDB فوراً
-      await ddb.send(new UpdateCommand({
-        TableName: USERS_TABLE,
-        Key: { userId: user.userId },
-        UpdateExpression: "set twoFactorSecret = :s, is2FAEnabled = :e",
-        ExpressionAttributeValues: { 
-          ":s": currentSecret, 
-          ":e": true 
-        }
-      }));
-      
-      // توليد الباركود
-      currentQrCode = await QRCode.toDataURL(secretObj.otpauth_url);
-      console.log(`✅ 2FA Auto-Enabled for: ${user.userId}`);
+// إذا ما عنده secret نسوي واحد جديد
+if (!currentSecret) {
+
+  const secretObj = speakeasy.generateSecret({
+    name: `HUSN:${user.userId}`
+  });
+
+  currentSecret = secretObj.base32;
+
+  await ddb.send(new UpdateCommand({
+    TableName: USERS_TABLE,
+    Key: { userId: user.userId },
+    UpdateExpression: "set twoFactorSecret = :s, is2FAEnabled = :e",
+    ExpressionAttributeValues: {
+      ":s": currentSecret,
+      ":e": true
     }
+  }));
+}
 
+// 🔐 يظهر QR فقط إذا أول مرة
+if (!user.is2FASetupComplete) {
+
+  const otpauthUrl = speakeasy.otpauthURL({
+    secret: currentSecret,
+    label: `HUSN:${user.userId}`,
+    issuer: "HUSN",
+    encoding: "base32"
+  });
+
+  currentQrCode = await QRCode.toDataURL(otpauthUrl);
+}
     // الرد النهائي بمسميات مطابقة لما يتوقعه الـ React
     res.json({
       userId: user.userId,
@@ -373,7 +384,8 @@ const item = {
 
     // 4. حفظ في DynamoDB
     await ddb.send(new PutCommand({ TableName: INCIDENTS_TABLE, Item: item }));
-
+    io.emit("new-incident", item);
+    console.log("🔥 Drone frame alert sent via Socket.io:", item);
   
     res.status(201).json({ detected: true, incident: item });
   } catch (error) {
@@ -454,19 +466,39 @@ app.post("/api/2fa/setup", async (req, res) => {
   }
 });
 
-app.post("/api/2fa/verify", (req, res) => {
-  const { userToken, userSecret } = req.body;
+app.post("/api/2fa/verify", async (req, res) => {
+  const { userId, userToken, userSecret } = req.body;
 
   const verified = speakeasy.totp.verify({
-    secret: userSecret, // السر اللي جبناه من الداتا بيز للمستخدم
+    secret: userSecret,
     encoding: 'base32',
-    token: userToken // الـ 6 أرقام اللي دخلها من جواله
+    token: userToken
   });
 
   if (verified) {
-    res.json({ success: true, message: "تم التحقق! ✅" });
+
+    // ✅ بعد أول تحقق نخفي الـ QR نهائي
+    await ddb.send(new UpdateCommand({
+      TableName: USERS_TABLE,
+      Key: { userId },
+      UpdateExpression: "set is2FASetupComplete = :v",
+      ExpressionAttributeValues: {
+        ":v": true
+      }
+    }));
+
+    res.json({
+      success: true,
+      message: "تم التحقق! ✅"
+    });
+
   } else {
-    res.status(400).json({ success: false, message: "الرمز خاطئ ❌" });
+
+    res.status(400).json({
+      success: false,
+      message: "الرمز خاطئ ❌"
+    });
+
   }
 });
 
