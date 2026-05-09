@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // استيراد المكونات
@@ -47,6 +47,28 @@ const Dashboard = () => {
   const [centeredAlert, setCenteredAlert] = useState<Alert | null>(null);
   const [weather, setWeather] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<{name: string, role: string} | null>(null);
+  const alarmRef = useRef<HTMLAudioElement | null>(null);
+
+const playAlarm = () => {
+  if (!alarmRef.current) {
+    alarmRef.current = new Audio("/alert.mp3");
+    alarmRef.current.loop = true;
+    alarmRef.current.volume = 1;
+  }
+
+  alarmRef.current.currentTime = 0;
+
+  alarmRef.current.play().catch((err) => {
+    console.log("Audio blocked:", err);
+  });
+};
+
+const stopAlarm = () => {
+  if (alarmRef.current) {
+    alarmRef.current.pause();
+    alarmRef.current.currentTime = 0;
+  }
+};
 
   // جلب بيانات المستخدم
   useEffect(() => {
@@ -91,6 +113,7 @@ const Dashboard = () => {
     // 🚀 استقبال بلاغ الحريق فوراً
     socket.on("new-incident", (incident: any) => {
       console.log("🔥 HUSN Alert Received:", incident);
+      playAlarm();
       
 const newAlert: Alert = {
   id: incident.incidentId,
@@ -253,7 +276,9 @@ const newAlert: Alert = {
         <CenteredAlert 
           alert={centeredAlert} 
           onViewDetails={() => handleViewDetails(centeredAlert)} 
-          onConfirm={() => {
+         onConfirm={() => {
+
+  stopAlarm();
             // 🛑 شرط الحماية
             if (centeredAlert.status === 'resolved') {
               toast.error(language === 'ar' ? "هذا البلاغ تم حله مسبقاً ولا يمكن إعادة تفعيله" : "Incident already resolved");
@@ -264,7 +289,10 @@ const newAlert: Alert = {
             updateIncidentStatus(centeredAlert.id, 'active');
             setCenteredAlert(null); // نقفل الشاشة بعد التأكيد
           }} 
-          onDismiss={() => setCenteredAlert(null)} 
+          onDismiss={() => {
+  stopAlarm();
+  setCenteredAlert(null);
+}}
         />
       )}
     </div>
