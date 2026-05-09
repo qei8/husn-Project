@@ -57,11 +57,9 @@ const playAlarm = () => {
   }
 
   alarmRef.current.currentTime = 0;
-
-  alarmRef.current.play().catch((err) => {
-    console.log("Audio blocked:", err);
-  });
+  alarmRef.current.play();
 };
+
 
 const stopAlarm = () => {
   if (alarmRef.current) {
