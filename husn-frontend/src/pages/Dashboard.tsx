@@ -51,7 +51,7 @@ const Dashboard = () => {
 
 const playAlarm = () => {
   if (!alarmRef.current) {
-    alarmRef.current = new Audio("/alert.mp3");
+    alarmRef.current = new Audio("/Alert_Husn.mp3");
     alarmRef.current.loop = true;
     alarmRef.current.volume = 1;
   }
